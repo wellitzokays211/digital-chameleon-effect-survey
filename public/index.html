@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>The T-shirt Study</title>
+
+<!-- Inter is loaded because the renderer measures and draws the shirt print in
+     '800 28px Inter'; the fallback face would change the glyph metrics. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<noscript>
+  <div class="noscript">
+    This study needs JavaScript enabled in order to run. Please enable it and reload
+    the page.
+  </div>
+</noscript>
+
+<div class="shell">
+  <header class="shell-head">
+    <span class="step" id="stepIndicator" hidden></span>
+  </header>
+
+  <!-- Every stage is built by app.js. Stage 4's controls are the exception: they are
+       fetched from the Worker, which sends back only the controls belonging to the
+       participant's assigned level. -->
+  <main id="app" class="shell-main" aria-live="polite"></main>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

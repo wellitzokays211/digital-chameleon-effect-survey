@@ -1,0 +1,29 @@
+{
+  "name": "digital-chameleon-simulation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Experimental platform for a BSc (Hons) dissertation study on the Digital Chameleon Effect. Cloudflare Worker + MongoDB Atlas.",
+  "scripts": {
+    "extract-assets": "node tools/extract-assets.mjs",
+    "dev": "node tools/dev-server.mjs",
+    "dev:workers": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "check": "node tools/self-check.mjs",
+    "check:live": "node tools/self-check.mjs http://127.0.0.1:8787"
+  },
+  "dependencies": {
+    "mongodb": "^6.15.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260828.1": true
+  }
+}

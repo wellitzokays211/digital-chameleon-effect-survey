@@ -1,0 +1,42 @@
+# Cloudflare Worker with static assets.
+#
+# One deployment serves the static frontend and the server-side logic. A Worker is
+# used rather than Pages Functions because the MongoDB connection pool lives in a
+# Durable Object, and Durable Object classes cannot be declared from Pages Functions.
+# `nodejs_compat` plus a recent compatibility date is what lets the official MongoDB
+# driver open TCP sockets from the Worker runtime.
+
+# Deliberately names only the visible task. This appears in the URL every participant
+# sees, so it must not name the construct under test: a participant who searched the
+# hypothesis before rating the garment would be answering a different question.
+name = "the-tshirt-study"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Static files win for any path that matches one, so /api/* and /stage4/* fall through
+# to the Worker. Unknown paths are handed to the Worker too, which redirects them to
+# the study entry point rather than serving a bare 404.
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "MONGO"
+class_name = "MongoConnection"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MongoConnection"]
+
+[vars]
+MONGODB_DB = "chameleon_study"
+
+# Secrets are never committed. Locally they come from .dev.vars; in production set them
+# with `wrangler secret put <NAME>`:
+#   MONGODB_URI       Atlas SRV connection string
+#   EMAIL_HASH_SALT   long random string; pepper for the email hash
+#   ADMIN_TOKEN       long random string; guards the /api/admin/* endpoints

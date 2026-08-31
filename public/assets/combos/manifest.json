@@ -1,0 +1,149 @@
+{
+  "combos": {
+    "female_round_sleeveless": {
+      "originalHex": "#85F847",
+      "photo": "assets/combos/female_round_sleeveless/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/female_round_sleeveless/skin-mask.png",
+      "shirtMask": "assets/combos/female_round_sleeveless/shirt-mask.png",
+      "model": "female",
+      "neckline": "round",
+      "sleeve": "sleeveless"
+    },
+    "female_v_sleeveless": {
+      "originalHex": "#9BF752",
+      "photo": "assets/combos/female_v_sleeveless/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/female_v_sleeveless/skin-mask.png",
+      "shirtMask": "assets/combos/female_v_sleeveless/shirt-mask.png",
+      "model": "female",
+      "neckline": "v",
+      "sleeve": "sleeveless"
+    },
+    "female_round_short": {
+      "originalHex": "#8FF557",
+      "photo": "assets/combos/female_round_short/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/female_round_short/skin-mask.png",
+      "shirtMask": "assets/combos/female_round_short/shirt-mask.png",
+      "model": "female",
+      "neckline": "round",
+      "sleeve": "short"
+    },
+    "female_v_short": {
+      "originalHex": "#08EE27",
+      "photo": "assets/combos/female_v_short/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/female_v_short/skin-mask.png",
+      "shirtMask": "assets/combos/female_v_short/shirt-mask.png",
+      "model": "female",
+      "neckline": "v",
+      "sleeve": "short"
+    },
+    "female_round_long": {
+      "originalHex": "#3FF52D",
+      "photo": "assets/combos/female_round_long/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/female_round_long/skin-mask.png",
+      "shirtMask": "assets/combos/female_round_long/shirt-mask.png",
+      "model": "female",
+      "neckline": "round",
+      "sleeve": "long"
+    },
+    "female_v_long": {
+      "originalHex": "#54F53B",
+      "photo": "assets/combos/female_v_long/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/female_v_long/skin-mask.png",
+      "shirtMask": "assets/combos/female_v_long/shirt-mask.png",
+      "model": "female",
+      "neckline": "v",
+      "sleeve": "long"
+    },
+    "male_round_sleeveless": {
+      "originalHex": "#2FE60C",
+      "photo": "assets/combos/male_round_sleeveless/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/male_round_sleeveless/skin-mask.png",
+      "shirtMask": "assets/combos/male_round_sleeveless/shirt-mask.png",
+      "model": "male",
+      "neckline": "round",
+      "sleeve": "sleeveless"
+    },
+    "male_v_sleeveless": {
+      "originalHex": "#07F008",
+      "photo": "assets/combos/male_v_sleeveless/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/male_v_sleeveless/skin-mask.png",
+      "shirtMask": "assets/combos/male_v_sleeveless/shirt-mask.png",
+      "model": "male",
+      "neckline": "v",
+      "sleeve": "sleeveless"
+    },
+    "male_round_short": {
+      "originalHex": "#02EE0E",
+      "photo": "assets/combos/male_round_short/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/male_round_short/skin-mask.png",
+      "shirtMask": "assets/combos/male_round_short/shirt-mask.png",
+      "model": "male",
+      "neckline": "round",
+      "sleeve": "short"
+    },
+    "male_v_short": {
+      "originalHex": "#44F63C",
+      "photo": "assets/combos/male_v_short/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/male_v_short/skin-mask.png",
+      "shirtMask": "assets/combos/male_v_short/shirt-mask.png",
+      "model": "male",
+      "neckline": "v",
+      "sleeve": "short"
+    },
+    "male_round_long": {
+      "originalHex": "#4DEC39",
+      "photo": "assets/combos/male_round_long/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/male_round_long/skin-mask.png",
+      "shirtMask": "assets/combos/male_round_long/shirt-mask.png",
+      "model": "male",
+      "neckline": "round",
+      "sleeve": "long"
+    },
+    "male_v_long": {
+      "originalHex": "#16F232",
+      "photo": "assets/combos/male_v_long/photo.png",
+      "width": 760,
+      "height": 626,
+      "skinMask": "assets/combos/male_v_long/skin-mask.png",
+      "shirtMask": "assets/combos/male_v_long/shirt-mask.png",
+      "model": "male",
+      "neckline": "v",
+      "sleeve": "long"
+    }
+  },
+  "models": [
+    "female",
+    "male"
+  ],
+  "necklines": [
+    "round",
+    "v"
+  ],
+  "sleeves": [
+    "sleeveless",
+    "short",
+    "long"
+  ]
+}

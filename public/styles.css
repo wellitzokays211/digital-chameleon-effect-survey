@@ -1,0 +1,521 @@
+/* Neutral, academic styling.
+ *
+ * The prototype's own look was deliberately boutique-retail: a display serif, an
+ * "Women's Essentials" eyebrow, an "Add to bag" button. All of that is dropped here,
+ * because the brief requires nothing that implies a real store -- a participant who
+ * reads the page as a shop will rate purchase intention against a shop.
+ *
+ * The control classes (.pill-options, .text-input, .stepper, the range track) keep the
+ * prototype's names and proportions, so the Stage 4 controls the Worker injects look
+ * native to the garment view they sit beside. */
+
+:root {
+  --bg: #ECEAE4;
+  --panel: #FFFFFF;
+  --ink: #1B1A18;
+  --ink-soft: #6E6A62;
+  --line: #DCD9D0;
+  --accent: #2B3A4A;
+  --error: #9B2C2C;
+  --error-bg: #FDF2F2;
+  --focus: #2B3A4A;
+  --stack-at: 760px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+.noscript {
+  max-width: 560px;
+  margin: 48px auto;
+  padding: 18px 20px;
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 3px;
+}
+
+.shell {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+
+.shell-head {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 22px;
+  margin-bottom: 18px;
+}
+
+.step {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* ---------------- cards and typography ---------------- */
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 28px;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.card.wide { max-width: 100%; }
+
+h1 {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0 0 14px;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+p { margin: 0 0 14px; }
+p:last-child { margin-bottom: 0; }
+
+.lede { color: var(--ink-soft); }
+.consent-body { font-size: 14.5px; line-height: 1.7; }
+
+.centred { text-align: center; }
+
+/* ---------------- form fields ---------------- */
+
+.field { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px; }
+.field:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+
+.field-label {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.field-hint { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 10px; }
+
+.text-input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--panel);
+  outline: none;
+  transition: border-color .15s ease;
+}
+.text-input:focus { border-color: var(--ink); }
+.text-input[aria-invalid="true"] { border-color: var(--error); }
+textarea.text-input { resize: vertical; }
+
+input[type="number"].text-input { max-width: 180px; }
+
+/* Radio groups render as stacked rows: on a phone a 7-point scale in a row of
+   circles is unreadable, and this study cannot afford mis-taps on its outcome
+   measures. */
+.options { display: flex; flex-direction: column; gap: 8px; }
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--panel);
+  transition: border-color .12s ease, background .12s ease;
+}
+.option:hover { border-color: var(--ink-soft); }
+.option:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px rgba(43,58,74,0.12); }
+.option input { margin: 0; accent-color: var(--accent); flex: none; }
+.option.selected { border-color: var(--ink); background: #FAF9F6; }
+.option-text { font-size: 14px; }
+
+/* ---------------- errors ---------------- */
+
+.error {
+  display: block;
+  margin-top: 9px;
+  padding: 9px 11px;
+  background: var(--error-bg);
+  border-left: 2px solid var(--error);
+  color: var(--error);
+  font-size: 13px;
+  border-radius: 2px;
+}
+.error[hidden] { display: none; }
+
+.form-error { margin: 18px 0 0; }
+
+/* ---------------- buttons ---------------- */
+
+.cta {
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: opacity .15s ease;
+  margin-top: 24px;
+}
+.cta:hover:not(:disabled) { opacity: 0.9; }
+.cta:active:not(:disabled) { opacity: 0.78; }
+.cta:disabled { opacity: 0.45; cursor: not-allowed; }
+.cta.secondary { background: transparent; color: var(--ink-soft); border: 1px solid var(--line); }
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  cursor: pointer;
+}
+.checkbox-row input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+
+/* ---------------- calibration swatches ---------------- */
+
+.swatch-pool {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-top: 6px;
+}
+@media (max-width: 560px) {
+  .swatch-pool { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+}
+
+.pool-swatch {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.10);
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.pool-swatch:hover { transform: translateY(-2px); }
+.pool-swatch:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.pool-swatch[disabled] { opacity: 0.25; cursor: not-allowed; transform: none; }
+
+/* The locked swatch keeps its full colour and gains a ring, so the participant's current
+   choice reads as the brightest thing in the grid. A spent choice from the previous step
+   is dimmed instead, but not so far that its badge stops being legible. */
+.pool-swatch.locked {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px #fff, inset 0 0 0 1px rgba(0,0,0,0.10);
+}
+.pool-swatch.locked:hover { transform: none; }
+.pool-swatch.locked[disabled] { opacity: 0.5; }
+
+.swatch-lock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* A pill rather than a full overlay: dark enough to be readable on all ten hues while
+   leaving most of the swatch colour visible around it. */
+.swatch-lock span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(27, 26, 24, 0.74);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ---------------- loading and reveal ---------------- */
+
+.loading { text-align: center; padding: 72px 20px; }
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 22px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
+
+.reveal-swatch {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 22px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+}
+
+/* pre-line honours the newline the server puts before the attribution clause. */
+.reveal-sentence {
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 42ch;
+  margin: 0 auto;
+  white-space: pre-line;
+}
+
+/* ---------------- stage 4 garment view ---------------- */
+
+.stage4 {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.photo-col { flex: 1 1 420px; min-width: 300px; position: sticky; top: 24px; }
+
+.info-col { flex: 1 1 340px; min-width: 280px; }
+
+/* One breakpoint drives both the column stacking and the sticky photo, so the two
+   can never disagree and leave the controls scrolling under the photo. */
+@media (max-width: 760px) {
+  .stage4 { flex-direction: column; flex-wrap: wrap; gap: 26px; }
+  .photo-col { position: static; width: 100%; }
+}
+
+.frame {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.frame canvas { display: block; width: 100%; height: auto; }
+
+.frame.busy::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.55);
+}
+
+#textBoxOverlay {
+  position: absolute;
+  display: none;
+  border: 1px dashed rgba(27,26,24,0.6);
+  background: rgba(43,58,74,0.05);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+/* Level 1 has no controls, so the garment sits on its own rather than beside an
+   empty column that would invite the question of what belongs there. */
+.stage4.static-only { display: block; max-width: 520px; margin: 0 auto; }
+
+/* ---------------- stage 4 controls ---------------- */
+
+.control-block { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px; }
+.control-block:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+.control-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 13px;
+  gap: 12px;
+}
+.control-label { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+.control-readout { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
+
+.swatch-dot { width: 15px; height: 15px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
+
+.pill-options { display: flex; gap: 8px; }
+
+.pill-option {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--panel);
+  color: var(--ink);
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.pill-option:hover:not(.active) { border-color: var(--ink-soft); }
+.pill-option.active { border-color: var(--ink); background: var(--ink); color: #fff; }
+.pill-option:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.slider-wrap { position: relative; height: 28px; display: flex; align-items: center; margin-bottom: 10px; }
+
+.track-bg {
+  position: absolute;
+  left: 0; right: 0;
+  height: 8px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+  pointer-events: none;
+}
+
+input[type=range] {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-runnable-track { height: 8px; background: transparent; }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.25);
+  margin-top: -6px;
+  border: 3px solid var(--ink);
+}
+input[type=range]::-moz-range-track { height: 8px; background: transparent; }
+input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.25);
+  border: 3px solid var(--ink);
+}
+
+.slider-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.stepper-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+.stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
+.stepper-btn {
+  width: 30px; height: 30px;
+  border: none;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.stepper-btn:hover:not(:disabled) { background: var(--bg); }
+.stepper-btn:disabled { color: var(--line); cursor: not-allowed; }
+.stepper-value {
+  display: inline-block;
+  min-width: 44px;
+  text-align: center;
+  font-size: 13px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 0 4px;
+  line-height: 30px;
+}
+
+.hint { font-size: 11.5px; color: var(--ink-soft); margin: 6px 0 0; }
+
+/* ---------------- questionnaire ---------------- */
+
+.likert-item { border-top: 1px solid var(--line); padding: 20px 0; }
+.likert-item:first-of-type { border-top: none; padding-top: 0; }
+
+.likert-statement { font-size: 15px; margin-bottom: 12px; }
+
+.likert-scale {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.likert-point {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 2px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--panel);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  transition: border-color .12s ease, background .12s ease;
+}
+.likert-point:hover { border-color: var(--ink-soft); }
+.likert-point.selected { border-color: var(--ink); background: var(--ink); color: #fff; }
+.likert-point:focus-within { box-shadow: 0 0 0 2px rgba(43,58,74,0.16); }
+.likert-point input { position: absolute; opacity: 0; pointer-events: none; }
+
+.likert-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 7px;
+}
+
+@media (max-width: 560px) {
+  .likert-point { padding: 11px 2px; font-size: 13px; }
+  .likert-scale { gap: 4px; }
+}
+
+/* ---------------- terminal screens ---------------- */
+
+.terminal { text-align: center; padding: 64px 20px; }
+.terminal h1 { font-size: 19px; }
+.terminal p { color: var(--ink-soft); max-width: 44ch; margin: 0 auto; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
