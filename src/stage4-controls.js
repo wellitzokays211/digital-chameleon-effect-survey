@@ -322,6 +322,14 @@ const PRELUDE = [
   'var renderer = ctx.renderer;',
   'var rt = ctx.rt;',
   'var initial = ctx.initial || {};',
+  /* esbuild, which bundles the Worker on deploy, follows every function declaration
+     with `__name(fn, "fn")` so names survive minification. These controls are
+     serialised with Function.prototype.toString(), so that helper call is carried into
+     the browser verbatim, where `__name` does not exist and the control throws at the
+     first inner function it declares. The dev server imports these modules and never
+     runs esbuild, so the failure appears only once deployed. Harmless when the helper
+     was never injected. */
+  'var __name = function (fn) { return fn; };',
   'var controlBlock = ' + controlBlock.toString() + ';',
   'var pills = ' + pills.toString() + ';'
 ].join('\n');
@@ -341,6 +349,15 @@ const CONTROL_ORDER = ['text', 'sleeve', 'neck', 'skinTone'];
 
 export function buildControlBundle(controlNames) {
   const allowed = CONTROL_ORDER.filter((name) => controlNames.includes(name));
-  const bodies = allowed.map((name) => `(${CONTROL_SOURCES[name].toString()})();`);
+  /* Each control is wrapped separately. The bodies are concatenated into one function,
+     so an uncaught throw in an early control would abandon every control after it and
+     leave the participant customising less than their level allows. That is a silently
+     different treatment reaching the dataset as though it were the intended one, which
+     is the one failure mode here that analysis could never detect afterwards. */
+  const bodies = allowed.map(
+    (name) =>
+      `try {\n(${CONTROL_SOURCES[name].toString()})();\n} catch (err) {\n` +
+      `  ctx.controlFailed(${JSON.stringify(name)}, err);\n}`
+  );
   return [PRELUDE, ...bodies, EPILOGUE].join('\n\n');
 }

@@ -348,6 +348,40 @@ check(
   /Custom text/.test(level3Bundle) && /Sleeve length/.test(level3Bundle) && /Neckline/.test(level3Bundle)
 );
 
+/* ---------------- the deploy bundler's helpers must not break the controls ----------
+ *
+ * The controls reach the browser as text produced by Function.prototype.toString(), so
+ * whatever the Worker's bundler did to the source travels with them. esbuild appends
+ * `__name(fn, "fn")` after each function declaration, which is not defined in the
+ * browser and throws at the first inner function a control declares. Nothing catches
+ * this locally, because the dev server imports the modules and never runs esbuild:
+ * every level worked on 127.0.0.1 and every level was broken once deployed. */
+
+check(
+  'the prelude shims the bundler helper the deployed controls carry',
+  /var __name = /.test(level1Bundle),
+  'without it, every control throws at its first inner function once deployed'
+);
+
+let shimHolds = true;
+let shimError = '';
+try {
+  const withHelper = level1Bundle.replace(
+    'return { collect:',
+    '__name(function probe() {}, "probe");\nreturn { collect:'
+  );
+  // eslint-disable-next-line no-new-func
+  new Function('ctx', withHelper)({});
+} catch (err) {
+  shimHolds = false;
+  shimError = err.message;
+}
+check(
+  'a bundle carrying an esbuild __name call still executes',
+  shimHolds,
+  shimError
+);
+
 /* ---------------- the renderer must be importable ----------------
  *
  * Top-level code in the renderer builds its gamma lookup tables and must touch no DOM,

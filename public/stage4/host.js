@@ -198,6 +198,14 @@ export function mount(handle, options) {
       initial: draft || null,
       notifyChange: () => {
         if (onDraftChange) onDraftChange(collect());
+      },
+      /* Reported per control rather than for the bundle as a whole, so a failure names
+         the control that broke instead of only the first symptom. Logged loudly on
+         purpose: at console.debug this was invisible in Chrome, whose default level
+         hides it, and a control missing from a participant's screen is exactly the
+         thing that must not go unnoticed. */
+      controlFailed: (name, err) => {
+        console.error(`Stage 4 control "${name}" failed to initialise:`, err);
       }
     };
 
@@ -208,7 +216,7 @@ export function mount(handle, options) {
       const factory = new Function('ctx', code);
       controlApi = factory(ctx) || null;
     } catch (err) {
-      console.debug('controls failed to initialise', err?.message);
+      console.error('Stage 4 controls failed to initialise:', err);
     }
 
     controlsCol.append(continueBtn, errorSlot);
