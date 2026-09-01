@@ -9,7 +9,14 @@
 # Deliberately names only the visible task. This appears in the URL every participant
 # sees, so it must not name the construct under test: a participant who searched the
 # hypothesis before rating the garment would be answering a different question.
-name = "the-tshirt-study"
+#
+# Changing this does not rename the deployed Worker, it deploys a second one. The old
+# name stays live on the same database until it is deleted, and the new one starts with
+# no secrets at all -- and src/data.js answers a missing MONGODB_URI by falling back to
+# Durable Object storage rather than failing, so an unconfigured rename collects real
+# responses into the wrong store while looking healthy. Set all three secrets before
+# the new URL goes anywhere.
+name = "tshirt"
 main = "src/index.js"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]

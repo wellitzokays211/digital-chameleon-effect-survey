@@ -12,7 +12,7 @@
  *
  * Usage (PowerShell):
  *   $env:ADMIN_TOKEN = "your admin token"
- *   node tools/export-csv.mjs --url https://the-tshirt-study.surveylk.workers.dev
+ *   node tools/export-csv.mjs --url https://tshirt.YOUR-SUBDOMAIN.workers.dev
  *
  * Or from a file you already downloaded:
  *   node tools/export-csv.mjs --file backup.json

@@ -137,7 +137,7 @@ npm run deploy
 ```
 
 Wrangler prints your URL, something like
-`https://the-tshirt-study.<your-subdomain>.workers.dev`.
+`https://tshirt.<your-subdomain>.workers.dev`.
 
 The Worker is named for the visible task only. That name is in the URL of every
 participant's browser, so it must not name the construct under test — a participant who
@@ -148,7 +148,7 @@ question than the one you asked.
 
 ```bash
 curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
-  https://the-tshirt-study.YOUR-SUBDOMAIN.workers.dev/api/admin/health
+  https://tshirt.YOUR-SUBDOMAIN.workers.dev/api/admin/health
 ```
 
 You want `{"ok":true,"backend":"mongodb"}`.
@@ -160,7 +160,7 @@ storage instead of your cluster.
 ### 3.7 Run the checks against the live deployment
 
 ```bash
-node tools/self-check.mjs https://the-tshirt-study.YOUR-SUBDOMAIN.workers.dev
+node tools/self-check.mjs https://tshirt.YOUR-SUBDOMAIN.workers.dev
 ```
 
 Two lines in its output matter as much as the pass count:
@@ -175,7 +175,7 @@ ever says `ENABLED`, stop — participants could open any condition and level at
 the blinding is gone. You can check it directly too; a 404 is the correct answer:
 
 ```bash
-curl -i -X POST https://the-tshirt-study.YOUR-SUBDOMAIN.workers.dev/api/dev/preview
+curl -i -X POST https://tshirt.YOUR-SUBDOMAIN.workers.dev/api/dev/preview
 ```
 
 Set `ADMIN_TOKEN` in your shell first, or the admin checks cannot authenticate:
@@ -257,7 +257,7 @@ them.
 
 ```powershell
 $env:ADMIN_TOKEN = "your admin token"
-node tools/export-csv.mjs --url https://the-tshirt-study.YOUR-SUBDOMAIN.workers.dev
+node tools/export-csv.mjs --url https://tshirt.YOUR-SUBDOMAIN.workers.dev
 ```
 
 Writes `exports/responses.csv` — one row per completed participant, ready for SPSS, R,
