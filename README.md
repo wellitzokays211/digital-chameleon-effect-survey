@@ -91,7 +91,7 @@ src/                         the Worker — never served
 tools/
   extract-assets.mjs         prototype -> cacheable image files
   dev-server.mjs             plain-Node server, no Workers runtime needed
-  self-check.mjs             198 automated checks
+  self-check.mjs             232 automated checks
   preview.html               dev-only cell picker, deliberately outside public/
 
 prototype/                   the original file, kept for provenance. Never deployed.
@@ -252,7 +252,7 @@ completed counts are unchanged by it.
 
 ## Decisions taken against the brief
 
-Five points where the brief and the prototype disagreed, resolved as agreed:
+Six points where the brief and the prototype disagreed, resolved as agreed:
 
 1. **No graphic/icon picker.** The prototype has none, and one was not built. Text is
    the whole content control; the engagement maxima drop to 3 and 4 accordingly.
@@ -274,6 +274,22 @@ Five points where the brief and the prototype disagreed, resolved as agreed:
    parenthesised beneath the colour name. The words are the brief's words and both
    conditions stay matched in tone and length — only the punctuation and line break
    differ, so that the attribution does not compete with the colour name for attention.
+6. **The customisation prompt lists what can be changed.** Levels 2 and 3 name their
+   available changes as a list before "Start customising", so nobody has to discover a
+   control to know it exists. The list is built per level on the Worker, so a Level 2
+   participant is never sent the Level 3 item.
+
+   The Level 3 entry reads "Change the model's skin tone to match yours". This was
+   chosen deliberately after the alternative was put, and it carries a consequence for
+   analysis: **skin-tone matching at Level 3 is matching under instruction, not
+   spontaneous matching.** A participant who ends near their own tone may be complying
+   with the prompt rather than revealing a preference, and the two cannot be separated
+   after the fact. The measure is still comparable across conditions and generations,
+   because every Level 3 participant receives the identical instruction, so
+   condition-by-level effects remain interpretable; what cannot be claimed is that
+   matching occurred unprompted. This belongs in the limitations section. The control
+   itself gives no target, no reference and no closeness feedback, so precision of
+   match remains the participant's own judgement.
 
 Two further changes were made without asking, both invisible to participants:
 

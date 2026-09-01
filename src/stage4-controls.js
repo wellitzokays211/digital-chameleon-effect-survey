@@ -260,9 +260,13 @@ function neckControl() {
 
 /* ---------------- skin tone ----------------
  *
- * No reference, no comparison, no matching score and no feedback of any kind: it is
- * one available option like the others. Anything that told a participant how close
- * they were to something would be measuring a different construct. */
+ * No reference, no comparison, no matching score and no feedback of any kind. Anything
+ * that told a participant how close they were to something would be measuring a
+ * different construct, so where they land stays their own judgement.
+ *
+ * Note that the Level 3 prompt does ask them to match their own tone -- see
+ * CUSTOMISATION_CHANGES_BY_LEVEL in study-design.js. The silence here is therefore
+ * about the act of matching, not about whether it was invited. */
 
 function skinToneControl() {
   var dot = h('span', { class: 'swatch-dot' });

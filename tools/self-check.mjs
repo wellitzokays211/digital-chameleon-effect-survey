@@ -20,6 +20,7 @@
 import {
   CONDITIONS,
   CONTROLS_BY_LEVEL,
+  CUSTOMISATION_CHANGES_BY_LEVEL,
   ENGAGEMENT_FLAGS_BY_LEVEL,
   LEVELS,
   TARGET_PER_CELL,
@@ -198,6 +199,43 @@ check(
   CONTROLS_BY_LEVEL[3].includes('skinTone') &&
     CONTROLS_BY_LEVEL[2].every((c) => CONTROLS_BY_LEVEL[3].includes(c)),
   JSON.stringify(CONTROLS_BY_LEVEL[3])
+);
+
+/* The list shown before "Start customising" has to track the controls actually served,
+   or a participant is promised something they do not get, or not told about something
+   they do. It is also the one participant-facing text that differs by level, so it is
+   the obvious place for the design to leak. */
+
+check(
+  'Level 1 is promised no changes',
+  CUSTOMISATION_CHANGES_BY_LEVEL[1].length === 0
+);
+check(
+  'the promised changes match the controls served at each level',
+  [2, 3].every((l) => CUSTOMISATION_CHANGES_BY_LEVEL[l].length === CONTROLS_BY_LEVEL[l].length),
+  `level 2: ${CUSTOMISATION_CHANGES_BY_LEVEL[2].length} promised for ` +
+    `${CONTROLS_BY_LEVEL[2].length} controls; level 3: ` +
+    `${CUSTOMISATION_CHANGES_BY_LEVEL[3].length} for ${CONTROLS_BY_LEVEL[3].length}`
+);
+check(
+  'the Level 2 list never mentions skin or tone',
+  !/skin|tone|colour of the model/i.test(CUSTOMISATION_CHANGES_BY_LEVEL[2].join(' ')),
+  `this is the blinding boundary: ${JSON.stringify(CUSTOMISATION_CHANGES_BY_LEVEL[2])}`
+);
+check(
+  'the Level 3 list names the skin-tone control',
+  /skin tone/i.test(CUSTOMISATION_CHANGES_BY_LEVEL[3].join(' ')),
+  JSON.stringify(CUSTOMISATION_CHANGES_BY_LEVEL[3])
+);
+/* Pinned rather than pattern-matched. This one string decides whether the skin-tone
+   measure reads as a preference revealed or as an instruction followed, so it is not
+   copy that should be reworded in passing: a failure here means someone changed the
+   construct, and the write-up has to change with it. */
+check(
+  'the Level 3 skin-tone wording is exactly the agreed instruction',
+  CUSTOMISATION_CHANGES_BY_LEVEL[3].at(-1) === "Change the model's skin tone to match yours",
+  `found ${JSON.stringify(CUSTOMISATION_CHANGES_BY_LEVEL[3].at(-1))}; ` +
+    'the study is written up as matching under instruction'
 );
 
 /* ---------------- reveal wording ---------------- */
@@ -402,6 +440,59 @@ try {
 } catch (err) {
   failures.push(`the renderer could not be imported: ${err.message}`);
 }
+
+/* ---------------- the two pauses above Continue must stay matched ----------------
+ *
+ * stage4CompletionSeconds is compared across levels, so the invitation to linger has to
+ * be the same invitation for participants with controls and for those without. Losing
+ * one of these lines, or rewording only one of them, would turn part of a timing
+ * difference into an artefact of the copy. */
+
+section('Stage 4 closing instruction');
+
+const hostSource = await readFile(new URL('../public/stage4/host.js', import.meta.url), 'utf8');
+
+check(
+  'the no-controls view still invites a pause before continuing',
+  /const LOOK_HINT = 'Take a moment to look at this T-shirt, then continue\.';/.test(hostSource)
+);
+check(
+  'the controls view invites a pause before continuing',
+  /const CUSTOMISE_HINT = 'Take a moment to customise and then continue when you are ready\.';/.test(
+    hostSource
+  )
+);
+check(
+  'both hints are actually rendered, not merely declared',
+  /text: LOOK_HINT/.test(hostSource) && /text: CUSTOMISE_HINT/.test(hostSource),
+  'a declared but unused hint is a line no participant ever sees'
+);
+check(
+  'the closing instruction sits above Continue, not below it',
+  /text: CUSTOMISE_HINT \}\), continueBtn/.test(hostSource)
+);
+
+/* Salience is part of the nudge, not decoration. If one of the two lines were styled as
+   a heading and the other as small print, the levels would differ in how firmly they
+   were told to pause, which lands in stage4CompletionSeconds. */
+check(
+  'both hints are styled at the same weight',
+  (hostSource.match(/class: 'stage4-instruction', text: (LOOK|CUSTOMISE)_HINT/g) || []).length === 2,
+  'one hint is styled differently from the other'
+);
+
+const cssSource = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+
+check(
+  'the instruction takes its type from the control labels',
+  /\.control-label,\s*\n\.stage4-instruction \{/.test(cssSource),
+  'they must share one declaration, or restyling the labels leaves the instruction behind'
+);
+check(
+  'the instruction is separated from the control above it',
+  /\.stage4-instruction \{ margin: \d\dpx /.test(cssSource),
+  'without a clear gap it reads as a caption on the last control'
+);
 
 /* ---------------- the development preview must not exist in production ----------------
  *
@@ -750,6 +841,21 @@ async function integration(base) {
     const hasSleeve = /Sleeve length/.test(code);
     const hasNeck = /Neckline/.test(code);
     const enabled = s.assignment.customisation.enabled;
+
+    /* Over real HTTP, and per session: what the participant was promised has to be what
+       the bundle they were served can actually do. Checked here rather than only against
+       the design constants, because these are two independent paths out of the Worker and
+       either one could drift. */
+    const promised = (s.assignment.customisation.changes || []).join(' ');
+    check(
+      'the promised changes agree with the controls actually served',
+      /skin tone/i.test(promised) === hasSkin &&
+        /text/i.test(promised) === hasText &&
+        /sleeve/i.test(promised) === hasSleeve &&
+        /neck/i.test(promised) === hasNeck,
+      `promised ${JSON.stringify(promised)} against a bundle with ` +
+        `skin:${hasSkin} text:${hasText} sleeve:${hasSleeve} neck:${hasNeck}`
+    );
 
     if (!enabled) {
       bundles.empty++;

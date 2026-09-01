@@ -372,11 +372,17 @@ function renderOnboarding(prefill) {
 function renderCalibration(prefill) {
   let liked = prefill.likedColourHex ?? null;
 
-  /* Tapping a swatch locks it and stamps "Locked" across it, so the participant can see
+  /* Tapping a swatch locks it and stamps the badge across it, so the participant can see
      at a glance which colour they have committed to rather than inferring it from a thin
      border. The lock still moves if they tap elsewhere, and only Continue commits it: a
-     mis-tap must not silently decide the colour the rest of the study hangs on. */
-  function pool({ title, prompt, spent, initial, onConfirm }) {
+     mis-tap must not silently decide the colour the rest of the study hangs on.
+
+     Both the subheading and the badge name which of the two choices is being made. The
+     two screens are otherwise near-identical -- same heading, same grid, same layout --
+     so without that, a participant who glanced past the prompt could give their most
+     liked colour twice and never notice. That mistake is invisible in the data: the two
+     hexes are simply wrong, not missing. */
+  function pool({ title, subtitle, prompt, spent, spentLabel, lockLabel, initial, onConfirm }) {
     let chosen = initial || null;
     const buttons = new Map();
     const grid = h('div', { class: 'swatch-pool' });
@@ -387,8 +393,8 @@ function renderCalibration(prefill) {
         type: 'button',
         class: 'pool-swatch',
         style: `background:${colour.hex}`,
-        title: isSpent ? `${colour.name} (already chosen)` : colour.name,
-        'aria-label': isSpent ? `${colour.name}, already chosen` : colour.name,
+        title: isSpent ? `${colour.name} (locked as your ${spentLabel.toLowerCase()})` : colour.name,
+        'aria-label': isSpent ? `${colour.name}, locked as your ${spentLabel.toLowerCase()}` : colour.name,
         disabled: isSpent
       });
       if (!isSpent) {
@@ -406,11 +412,15 @@ function renderCalibration(prefill) {
     function paint() {
       for (const [hex, btn] of buttons) {
         const isChosen = chosen?.hex === hex;
-        const isLocked = isChosen || spent?.hex === hex;
-        btn.classList.toggle('locked', isLocked);
+        /* A spent colour is disabled, so it can never also be the chosen one. */
+        const role = isChosen ? lockLabel : spent?.hex === hex ? spentLabel : null;
+        btn.classList.toggle('locked', Boolean(role));
         if (!btn.disabled) btn.setAttribute('aria-pressed', String(isChosen));
+        /* The newline is deliberate, and rendered with white-space: pre-line. "Locked"
+           states what happened; the line under it states which of the two choices this
+           is, and stacking them keeps both legible inside a swatch. */
         btn.replaceChildren(
-          ...(isLocked ? [h('span', { class: 'swatch-lock' }, h('span', { text: 'Locked' }))] : [])
+          ...(role ? [h('span', { class: 'swatch-lock' }, h('span', { text: `Locked\n${role}` }))] : [])
         );
       }
       cta.disabled = !chosen;
@@ -423,6 +433,7 @@ function renderCalibration(prefill) {
 
     return h('div', { class: 'card' },
       h('h1', { text: title }),
+      h('h2', { text: subtitle }),
       h('p', { class: 'lede', text: prompt }),
       grid,
       h('p', { class: 'hint', text: 'Your choice locks when you tap it. You can change it until you continue.' }),
@@ -434,8 +445,11 @@ function renderCalibration(prefill) {
   function askLiked() {
     screen('calibration', pool({
       title: 'Colour preferences',
+      subtitle: 'Most Liked Colour',
       prompt: 'From the colours below, select the one you would most like to see on a casual T-shirt.',
       spent: null,
+      spentLabel: null,
+      lockLabel: 'Most Liked',
       initial: colourByHex(liked),
       onConfirm: (colour) => { liked = colour.hex; askDisliked(); }
     }));
@@ -446,8 +460,11 @@ function renderCalibration(prefill) {
   function askDisliked() {
     screen('calibration', pool({
       title: 'Colour preferences',
+      subtitle: 'Least Liked Colour',
       prompt: 'Now select the colour you would least like to see on a casual T-shirt.',
       spent: colourByHex(liked),
+      spentLabel: 'Most Liked',
+      lockLabel: 'Least Liked',
       initial: null,
       onConfirm: async (colour, cta, err) => {
         cta.disabled = true;

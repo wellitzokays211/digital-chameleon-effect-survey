@@ -17,6 +17,16 @@ import * as rt from '../renderer/tshirt-renderer.js';
 
 const MANIFEST_URL = '/assets/combos/manifest.json';
 
+/* The two lines that sit above Continue, kept together deliberately.
+ *
+ * One goes to participants with no controls, the other to those with controls, and
+ * stage4CompletionSeconds is measured for both. If one group were urged to linger and
+ * the other were not, a difference in how long they took would be partly a difference
+ * in what they were asked to do, not in how the garment held them. Both invite the
+ * same pause, so change neither without changing the other. */
+const LOOK_HINT = 'Take a moment to look at this T-shirt, then continue.';
+const CUSTOMISE_HINT = 'Take a moment to customise and then continue when you are ready.';
+
 let manifestPromise = null;
 function loadManifest() {
   if (!manifestPromise) {
@@ -147,7 +157,7 @@ export function mount(handle, options) {
     container.replaceChildren(
       h('div', { class: 'stage4 static-only' },
         frame,
-        h('p', { class: 'hint', text: 'Take a moment to look at this T-shirt, then continue.' }),
+        h('p', { class: 'stage4-instruction', text: LOOK_HINT }),
         continueBtn,
         errorSlot
       )
@@ -166,8 +176,18 @@ export function mount(handle, options) {
   const layout = h('div', { class: 'stage4' }, h('div', { class: 'photo-col' }, frame), controlsCol);
   container.replaceChildren(layout);
 
+  /* The list is whatever the Worker sent for this session. The host does not know which
+     level it is rendering and does not decide what belongs in it. */
+  const changes = Array.isArray(customisation.changes) ? customisation.changes : [];
+
   controlsCol.replaceChildren(
     h('p', { text: customisation.prompt }),
+    ...(changes.length
+      ? [
+          h('p', { class: 'changes-heading', text: customisation.changesHeading }),
+          h('ul', { class: 'changes-list' }, changes.map((item) => h('li', { text: item })))
+        ]
+      : []),
     h('button', { class: 'cta', text: customisation.cta, onclick: startCustomising })
   );
 
@@ -219,7 +239,11 @@ export function mount(handle, options) {
       console.error('Stage 4 controls failed to initialise:', err);
     }
 
-    controlsCol.append(continueBtn, errorSlot);
+    /* Appended after the controls, so it reads as the closing instruction rather than
+       as a caption on whichever control happens to come last. */
+    controlsCol.append(
+      h('p', { class: 'stage4-instruction', text: CUSTOMISE_HINT }), continueBtn, errorSlot
+    );
 
     /* Warming the remaining garment shapes only starts once the controls are up, so it
        never competes with the first paint. */

@@ -16,6 +16,8 @@ import { COLOUR_POOL, QUESTIONNAIRE_ITEMS, LIKERT_MIN, LIKERT_MAX } from '../pub
 import {
   CONDITIONS,
   CONTROLS_BY_LEVEL,
+  CUSTOMISATION_CHANGES_BY_LEVEL,
+  CUSTOMISATION_CHANGES_HEADING,
   CUSTOMISATION_CTA,
   CUSTOMISATION_PROMPT,
   FAST_COMPLETION_THRESHOLD_SECONDS,
@@ -217,7 +219,15 @@ export class StudyService {
       colourHsl: colour ? { h: colour.h, s: colour.s, l: colour.l } : null,
       model: modelForGender(doc.gender),
       customisation: hasControls
-        ? { enabled: true, prompt: CUSTOMISATION_PROMPT, cta: CUSTOMISATION_CTA }
+        ? {
+            enabled: true,
+            prompt: CUSTOMISATION_PROMPT,
+            changesHeading: CUSTOMISATION_CHANGES_HEADING,
+            /* Only this level's items. The client is given a finished list rather than
+               a level to look up, so it never holds the mapping. */
+            changes: CUSTOMISATION_CHANGES_BY_LEVEL[doc.assignedLevel] || [],
+            cta: CUSTOMISATION_CTA
+          }
         : { enabled: false },
       draft: doc.stage4Draft || null
     };

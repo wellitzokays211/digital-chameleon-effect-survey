@@ -140,6 +140,31 @@ export function revealSentence(colourName, condition) {
  * implying a Level 3 exists. */
 export const CUSTOMISATION_PROMPT = 'You can now customise this T-shirt.';
 export const CUSTOMISATION_CTA = 'Start customising';
+export const CUSTOMISATION_CHANGES_HEADING = 'Changes you can make:';
+
+/* What the participant is told they may change, before they commit to starting.
+ *
+ * Built here rather than in the browser: the list differs by level, so holding the
+ * mapping client-side would hand every participant the shape of the whole design. A
+ * Level 2 participant receives three items and no reason to think a fourth exists.
+ *
+ * The Level 3 skin-tone item asks participants to match their own tone. This is the
+ * researcher's decision, taken knowingly, and it changes what the skin-tone measure
+ * means: matching is now partly an instruction followed rather than a preference
+ * revealed, so it reads as matching under instruction and belongs in the limitations.
+ * The control itself still gives no reference, no target and no closeness feedback, so
+ * how near a participant lands remains their own judgement. Anyone changing this
+ * wording is changing the construct, not the copy. */
+export const CUSTOMISATION_CHANGES_BY_LEVEL = {
+  1: [],
+  2: ['Add text', 'Change the sleeve length', 'Change the neck type'],
+  3: [
+    'Add text',
+    'Change the sleeve length',
+    'Change the neck type',
+    "Change the model's skin tone to match yours"
+  ]
+};
 
 /* ---------------- progress ---------------- */
 

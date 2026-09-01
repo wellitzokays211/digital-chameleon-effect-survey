@@ -248,18 +248,23 @@ input[type="number"].text-input { max-width: 180px; }
   justify-content: center;
   pointer-events: none;
 }
-/* A pill rather than a full overlay: dark enough to be readable on all ten hues while
-   leaving most of the swatch colour visible around it. */
+/* A badge rather than a full overlay: dark enough to be readable on all ten hues while
+   leaving most of the swatch colour visible around it. Two lines by construction --
+   "Locked" over the choice it applies to -- so pre-line keeps the break the markup
+   asks for, and the whole label stays inside a swatch at every grid size. */
 .swatch-lock span {
-  padding: 4px 8px;
-  border-radius: 999px;
+  max-width: calc(100% - 8px);
+  padding: 4px 7px;
+  border-radius: 9px;
   background: rgba(27, 26, 24, 0.74);
   color: #fff;
   font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+  text-align: center;
   text-transform: uppercase;
-  white-space: nowrap;
+  white-space: pre-line;
 }
 
 /* ---------------- loading and reveal ---------------- */
@@ -348,6 +353,15 @@ input[type="number"].text-input { max-width: 180px; }
    empty column that would invite the question of what belongs there. */
 .stage4.static-only { display: block; max-width: 520px; margin: 0 auto; }
 
+.changes-heading { font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+.changes-list {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
 /* ---------------- stage 4 controls ---------------- */
 
 .control-block { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px; }
@@ -360,7 +374,18 @@ input[type="number"].text-input { max-width: 180px; }
   margin-bottom: 13px;
   gap: 12px;
 }
-.control-label { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+/* The closing instruction is deliberately in the same declaration as the control
+   labels rather than repeating their values. It is meant to read as a heading of equal
+   standing to "Custom text" or "Sleeve length", so that the participant registers it as
+   an instruction and not as small print, and sharing the rule means restyling the
+   labels can never quietly leave it behind. */
+.control-label,
+.stage4-instruction { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+
+/* The gap above is what separates the instruction from the last control, and it carries
+   the whole visual signal that this line is addressed to the participant rather than
+   attached to the control above it. The .cta below supplies its own 24px. */
+.stage4-instruction { margin: 30px 0 0; line-height: 1.55; }
 .control-readout { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
 
 .swatch-dot { width: 15px; height: 15px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
