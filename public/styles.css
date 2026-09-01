@@ -316,11 +316,25 @@ input[type="number"].text-input { max-width: 180px; }
 
 .info-col { flex: 1 1 340px; min-width: 280px; }
 
-/* One breakpoint drives both the column stacking and the sticky photo, so the two
-   can never disagree and leave the controls scrolling under the photo. */
+/* One breakpoint drives the column stacking, the sticky photo and the flex basis, so
+   the three can never disagree.
+
+   Resetting flex matters as much as the direction. The 420px and 340px above are a
+   flex-basis, which sizes along the main axis: side by side that is a width, but once
+   the direction is column it becomes a minimum height, and a photograph shorter than
+   420px leaves the difference as blank space between the garment and the controls.
+   Both columns are laid out at their natural height here and stretched to full width
+   instead, which is what align-items: flex-start would otherwise deny them. */
 @media (max-width: 760px) {
-  .stage4 { flex-direction: column; flex-wrap: wrap; gap: 26px; }
-  .photo-col { position: static; width: 100%; }
+  .stage4 { flex-direction: column; gap: 26px; }
+  .photo-col,
+  .info-col { flex: 0 0 auto; width: 100%; }
+  .photo-col { position: static; }
+  /* Letting the pills shrink to an exact third is only half the job: at a phone's width
+     a third of the column is barely wider than the word "Sleeveless" itself, and the
+     padding is what decides whether it sits on one line or wraps. Narrower here, so the
+     three-option rows read the same as the two-option ones. */
+  .pill-option { padding: 10px 8px; }
 }
 
 .frame {
@@ -382,10 +396,10 @@ input[type="number"].text-input { max-width: 180px; }
 .control-label,
 .stage4-instruction { font-size: 13.5px; font-weight: 500; color: var(--ink); }
 
-/* The gap above is what separates the instruction from the last control, and it carries
-   the whole visual signal that this line is addressed to the participant rather than
-   attached to the control above it. The .cta below supplies its own 24px. */
-.stage4-instruction { margin: 30px 0 0; line-height: 1.55; }
+/* Heads the garment column, so the gap goes underneath: it separates the instruction
+   from the photograph it introduces, and there is nothing above it to be mistaken for.
+   Both Stage 4 layouts place it in the same position, so one rule covers both. */
+.stage4-instruction { margin: 0 0 14px; line-height: 1.55; text-align: center; }
 .control-readout { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
 
 .swatch-dot { width: 15px; height: 15px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
@@ -394,6 +408,12 @@ input[type="number"].text-input { max-width: 180px; }
 
 .pill-option {
   flex: 1;
+  /* A flex item will not shrink below its longest unbreakable word unless it is told it
+     may. Without this, the three-option rows behave differently from the two-option
+     ones on a narrow screen: "Sleeveless" holds its pill open at min-content while the
+     other two shrink, and the row ends up wider than every other row in the column.
+     Zero here lets all three settle at an exact third, so the rows stay flush. */
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 2px;

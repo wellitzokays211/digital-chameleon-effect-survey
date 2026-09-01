@@ -441,24 +441,24 @@ try {
   failures.push(`the renderer could not be imported: ${err.message}`);
 }
 
-/* ---------------- the two pauses above Continue must stay matched ----------------
+/* ---------------- the two pauses at the head of Stage 4 must stay matched ----------------
  *
  * stage4CompletionSeconds is compared across levels, so the invitation to linger has to
  * be the same invitation for participants with controls and for those without. Losing
- * one of these lines, or rewording only one of them, would turn part of a timing
- * difference into an artefact of the copy. */
+ * one of these lines, rewording only one of them, or placing them differently would turn
+ * part of a timing difference into an artefact of the copy. */
 
-section('Stage 4 closing instruction');
+section('Stage 4 instruction');
 
 const hostSource = await readFile(new URL('../public/stage4/host.js', import.meta.url), 'utf8');
 
 check(
-  'the no-controls view still invites a pause before continuing',
-  /const LOOK_HINT = 'Take a moment to look at this T-shirt, then continue\.';/.test(hostSource)
+  'the no-controls view invites a pause and names the button',
+  /const LOOK_HINT = 'Take a moment to look at this T-shirt, then click Continue\.';/.test(hostSource)
 );
 check(
-  'the controls view invites a pause before continuing',
-  /const CUSTOMISE_HINT = 'Take a moment to customise and then continue when you are ready\.';/.test(
+  'the controls view invites a pause and names the button',
+  /const CUSTOMISE_HINT = 'Take a moment to customise and then click Continue when you are ready\.';/.test(
     hostSource
   )
 );
@@ -467,9 +467,33 @@ check(
   /text: LOOK_HINT/.test(hostSource) && /text: CUSTOMISE_HINT/.test(hostSource),
   'a declared but unused hint is a line no participant ever sees'
 );
+/* Both lines name the button, so renaming the button silently makes both of them point
+   at something the participant cannot find. */
 check(
-  'the closing instruction sits above Continue, not below it',
-  /text: CUSTOMISE_HINT \}\), continueBtn/.test(hostSource)
+  'the button both hints name is still labelled Continue',
+  /h\('button', \{ class: 'cta', text: 'Continue' \}\)/.test(hostSource),
+  'rename the button and the instructions have to be reworded with it'
+);
+
+/* Placement, not just presence. Both must head the garment rather than trail the page,
+   and the controls view must not raise its line before there is a Continue button for
+   it to name. */
+check(
+  'the no-controls view puts its instruction above the garment',
+  /text: LOOK_HINT \}\),\s*\n\s*frame,/.test(hostSource),
+  'the instruction must precede the frame, not follow it'
+);
+check(
+  'the controls view puts its instruction above the garment',
+  /photoCol\.prepend\(h\('p', \{ class: 'stage4-instruction', text: CUSTOMISE_HINT \}\)\);/.test(
+    hostSource
+  ),
+  'it belongs at the head of the sticky photo column'
+);
+check(
+  'the controls view raises its instruction only once the controls exist',
+  hostSource.indexOf('photoCol.prepend') > hostSource.indexOf('async function startCustomising'),
+  'shown any earlier it would name a Continue button that is not on screen yet'
 );
 
 /* Salience is part of the nudge, not decoration. If one of the two lines were styled as
@@ -489,9 +513,48 @@ check(
   'they must share one declaration, or restyling the labels leaves the instruction behind'
 );
 check(
-  'the instruction is separated from the control above it',
-  /\.stage4-instruction \{ margin: \d\dpx /.test(cssSource),
-  'without a clear gap it reads as a caption on the last control'
+  'the instruction is separated from the garment below it',
+  /\.stage4-instruction \{ margin: 0 0 \d+px; /.test(cssSource),
+  'the gap belongs underneath now that the line sits above the photograph'
+);
+
+/* ---------------- the stacked layout must not inherit a height ---------------- */
+
+section('Stage 4 layout');
+
+/* The columns are sized with a flex-basis, which is a width while they sit side by side
+   and a height the moment the breakpoint turns the row into a column. Left alone it
+   holds the garment column open to 420px and drops a band of empty space between the
+   photograph and the first control, on phones only, where it is easiest to miss. */
+check(
+  'the stacked layout resets the flex basis on both columns',
+  /@media \(max-width: 760px\) \{[\s\S]{0,200}?\.photo-col,\s*\n\s*\.info-col \{ flex: 0 0 auto; width: 100%; \}/.test(
+    cssSource
+  ),
+  'without this the basis becomes a minimum height and reopens the gap under the garment'
+);
+check(
+  'the columns are still sized side by side above the breakpoint',
+  /\.photo-col \{ flex: 1 1 420px;/.test(cssSource) && /\.info-col \{ flex: 1 1 340px;/.test(cssSource),
+  'the desktop basis is what gives the photograph its share of the row'
+);
+
+/* Every option row has to end at the same right edge. A flex item defaults to
+   min-width: auto, so a row whose longest label is one unbreakable word stops shrinking
+   before the others do and juts out past them. It shows up on the three-option rows
+   first, because a third of a phone-width column is the narrowest any pill gets. */
+/* Matched without reference to line endings: the stylesheet is CRLF here and would be
+   LF on a checkout elsewhere, and a check that quietly depends on which is a check that
+   fails for the wrong reason. */
+check(
+  'option pills may shrink below their longest word',
+  /\.pill-option \{[^}]*?min-width: 0;/.test(cssSource),
+  'without min-width: 0 the sleeve row is wider than the neckline and colour rows'
+);
+check(
+  'the pills are given tighter padding once stacked',
+  /@media \(max-width: 760px\) \{[\s\S]*?\.pill-option \{ padding: 10px \dpx; \}/.test(cssSource),
+  'at a third of a phone-width column the padding decides whether the label wraps'
 );
 
 /* ---------------- the development preview must not exist in production ----------------

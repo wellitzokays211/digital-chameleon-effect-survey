@@ -17,15 +17,17 @@ import * as rt from '../renderer/tshirt-renderer.js';
 
 const MANIFEST_URL = '/assets/combos/manifest.json';
 
-/* The two lines that sit above Continue, kept together deliberately.
+/* The two lines that head the garment column, kept together deliberately.
  *
  * One goes to participants with no controls, the other to those with controls, and
  * stage4CompletionSeconds is measured for both. If one group were urged to linger and
  * the other were not, a difference in how long they took would be partly a difference
  * in what they were asked to do, not in how the garment held them. Both invite the
- * same pause, so change neither without changing the other. */
-const LOOK_HINT = 'Take a moment to look at this T-shirt, then continue.';
-const CUSTOMISE_HINT = 'Take a moment to customise and then continue when you are ready.';
+ * same pause and name the same button, so change neither without changing the other. */
+/* "Continue" is capitalised because it names the button rather than describing an
+   action, and the button's own label is the participant's only reference for it. */
+const LOOK_HINT = 'Take a moment to look at this T-shirt, then click Continue.';
+const CUSTOMISE_HINT = 'Take a moment to customise and then click Continue when you are ready.';
 
 let manifestPromise = null;
 function loadManifest() {
@@ -156,8 +158,8 @@ export function mount(handle, options) {
   if (!enabled) {
     container.replaceChildren(
       h('div', { class: 'stage4 static-only' },
-        frame,
         h('p', { class: 'stage4-instruction', text: LOOK_HINT }),
+        frame,
         continueBtn,
         errorSlot
       )
@@ -173,7 +175,8 @@ export function mount(handle, options) {
    * customising began. */
 
   const controlsCol = h('div', { class: 'info-col' });
-  const layout = h('div', { class: 'stage4' }, h('div', { class: 'photo-col' }, frame), controlsCol);
+  const photoCol = h('div', { class: 'photo-col' }, frame);
+  const layout = h('div', { class: 'stage4' }, photoCol, controlsCol);
   container.replaceChildren(layout);
 
   /* The list is whatever the Worker sent for this session. The host does not know which
@@ -239,11 +242,14 @@ export function mount(handle, options) {
       console.error('Stage 4 controls failed to initialise:', err);
     }
 
-    /* Appended after the controls, so it reads as the closing instruction rather than
-       as a caption on whichever control happens to come last. */
-    controlsCol.append(
-      h('p', { class: 'stage4-instruction', text: CUSTOMISE_HINT }), continueBtn, errorSlot
-    );
+    /* Heads the garment column rather than trailing the controls. The column is sticky
+       above 760px, so from here the instruction stays on screen while the participant
+       scrolls through the controls, instead of sitting below a list they have to reach
+       the bottom of. Added only once the controls are up, because until then there is
+       no Continue button for it to be talking about. */
+    photoCol.prepend(h('p', { class: 'stage4-instruction', text: CUSTOMISE_HINT }));
+
+    controlsCol.append(continueBtn, errorSlot);
 
     /* Warming the remaining garment shapes only starts once the controls are up, so it
        never competes with the first paint. */
