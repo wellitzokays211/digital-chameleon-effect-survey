@@ -522,21 +522,65 @@ check(
 
 section('Stage 4 layout');
 
-/* The columns are sized with a flex-basis, which is a width while they sit side by side
-   and a height the moment the breakpoint turns the row into a column. Left alone it
-   holds the garment column open to 420px and drops a band of empty space between the
-   photograph and the first control, on phones only, where it is easiest to miss. */
-check(
-  'the stacked layout resets the flex basis on both columns',
-  /@media \(max-width: 760px\) \{[\s\S]{0,200}?\.photo-col,\s*\n\s*\.info-col \{ flex: 0 0 auto; width: 100%; \}/.test(
-    cssSource
-  ),
-  'without this the basis becomes a minimum height and reopens the gap under the garment'
-);
+/* Read once and asserted against, so these checks cannot accidentally be satisfied by
+   the desktop rules of the same name that sit outside the breakpoint. */
+const stackedBlock = (cssSource.match(/@media \(max-width: 760px\) \{[\s\S]*?\n\}/) || [''])[0];
+
+check('the stacked-layout rules were found', stackedBlock.length > 0);
+
 check(
   'the columns are still sized side by side above the breakpoint',
   /\.photo-col \{ flex: 1 1 420px;/.test(cssSource) && /\.info-col \{ flex: 1 1 340px;/.test(cssSource),
   'the desktop basis is what gives the photograph its share of the row'
+);
+
+/* Two separate faults come out of the same declaration, so they get a check each. The
+   basis is a width while the columns sit side by side and a height the moment the
+   breakpoint turns the row into a column: left alone it holds the garment column open to
+   420px and drops a band of empty space between the photograph and the first control. */
+check(
+  'the stacked layout resets the flex basis on both columns',
+  /flex: 0 0 auto;/.test(stackedBlock),
+  'the basis becomes a minimum height and reopens the gap under the garment'
+);
+
+/* The garment has to stay visible while the controls are used. Stacked, the controls sit
+   below it, so a static photograph leaves at the top of the scroll just as the
+   participant reaches the thing that changes it -- and a stage about seeing the effect of
+   your own choices becomes one about remembering it. */
+check(
+  'the garment stays pinned once the columns stack',
+  /position: sticky;/.test(stackedBlock) && /top: 0;/.test(stackedBlock),
+  'static here puts the photograph off screen exactly when the controls come into reach'
+);
+check(
+  'the pinned garment is opaque and sits above the controls',
+  /background: var\(--panel\);/.test(stackedBlock) && /z-index: 2;/.test(stackedBlock),
+  'the controls pass underneath it, so it cannot be transparent or beneath them'
+);
+check(
+  'the pinned garment is capped in height',
+  /\.photo-col \.frame \{ max-width: \d+vh;/.test(stackedBlock),
+  'uncapped it fills the screen and leaves no room to work in'
+);
+
+check(
+  'the pinned garment is separated by a flat border, not a shadow',
+  /border-bottom: 1px solid var\(--line\);/.test(stackedBlock) &&
+    !/box-shadow/.test(stackedBlock),
+  'a shadow makes it a panel floating over the card rather than part of it'
+);
+
+/* The fault this guards against overhangs the card by 38px at 360px wide and not at all
+   at 412px, so it presents as a bug on particular handsets and is invisible on every
+   desktop. The minimum widths it comes from are load-bearing for the side-by-side row,
+   which is why they are reset here rather than removed. */
+check(
+  'the stacked columns drop the minimum widths meant for the row',
+  /\.photo-col,\s*\n\s*\.info-col \{ flex: 0 0 auto; width: 100%; min-width: 0; \}/.test(
+    stackedBlock
+  ),
+  'a 300px floor inside a 262px card pushes the garment past the card edge'
 );
 
 /* Every option row has to end at the same right edge. A flex item defaults to

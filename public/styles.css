@@ -327,9 +327,40 @@ input[type="number"].text-input { max-width: 180px; }
    instead, which is what align-items: flex-start would otherwise deny them. */
 @media (max-width: 760px) {
   .stage4 { flex-direction: column; gap: 26px; }
+  /* min-width goes too, not just the basis. The 300px and 280px above stop the columns
+     collapsing while they sit side by side, but stacked they are floors wider than the
+     card itself on a narrow phone: at 360px the card's content area is about 262px, so
+     the garment column is forced 38px wider than its parent and overhangs the card's
+     right edge. It reads as the photograph and the card being misaligned, and it only
+     appears below roughly 390px, which is why it looks like a per-handset fault. */
   .photo-col,
-  .info-col { flex: 0 0 auto; width: 100%; }
-  .photo-col { position: static; }
+  .info-col { flex: 0 0 auto; width: 100%; min-width: 0; }
+
+  /* Sticky here too, not only in the desktop row. Once the columns stack, the controls
+     sit below the garment, so a static photograph scrolls out of view at exactly the
+     moment the participant starts changing it and they have to scroll back up to see
+     what they did. Keeping it pinned holds the change and its effect on screen together,
+     which is what this stage is for.
+
+     Opaque, because the controls now pass underneath it, and raised above them. The
+     height is capped rather than left to the column width: the photographs are 760x626,
+     so a frame no wider than 41vh is no taller than about a third of the viewport, which
+     leaves room to actually work in. vh is deliberate over dvh -- it does not shrink when
+     the keyboard opens for the text field, so the garment does not jump mid-edit.
+
+     Separated by a flat border rather than a drop shadow, which sits at the same inset as
+     the rules between the controls below and so reads as one of them. A shadow announced
+     this block as a panel of its own floating over the card, which is not what it is. */
+  .photo-col {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 10px 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .photo-col .frame { max-width: 41vh; margin-left: auto; margin-right: auto; }
+
   /* Letting the pills shrink to an exact third is only half the job: at a phone's width
      a third of the column is barely wider than the word "Sleeveless" itself, and the
      padding is what decides whether it sits on one line or wraps. Narrower here, so the
