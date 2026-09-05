@@ -11,7 +11,8 @@
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
     "check": "node tools/self-check.mjs",
-    "check:live": "node tools/self-check.mjs http://127.0.0.1:8787"
+    "check:live": "node tools/self-check.mjs http://127.0.0.1:8787",
+    "strings": "node tools/export-strings.mjs"
   },
   "dependencies": {
     "mongodb": "^6.15.0"

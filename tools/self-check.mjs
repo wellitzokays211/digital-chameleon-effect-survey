@@ -20,7 +20,7 @@
 import {
   CONDITIONS,
   CONTROLS_BY_LEVEL,
-  CUSTOMISATION_CHANGES_BY_LEVEL,
+  CUSTOMISATION_CHANGE_KEYS_BY_LEVEL,
   ENGAGEMENT_FLAGS_BY_LEVEL,
   LEVELS,
   TARGET_PER_CELL,
@@ -36,7 +36,15 @@ import { buildControlBundle } from '../src/stage4-controls.js';
 import { createRouter } from '../src/router.js';
 import { StudyService } from '../src/study-service.js';
 import { KvStore, MemoryKv } from '../src/stores.js';
-import { COLOUR_POOL } from '../public/shared/study-config.js';
+import { COLOUR_POOL, colourKey, QUESTIONNAIRE_ITEM_IDS } from '../public/shared/study-config.js';
+import { DEFAULT_LANGUAGE, LANGUAGES, LANGUAGE_CODES } from '../public/shared/languages.js';
+import { translate, missingKeys, staleKeys, catalogueFor } from '../public/shared/i18n.js';
+import {
+  ALL_SERVER_STRINGS,
+  changeStrings,
+  controlStrings,
+  customisationStrings
+} from '../src/strings-server.js';
 import { readFile, readdir } from 'node:fs/promises';
 
 let passed = 0;
@@ -62,11 +70,270 @@ check(
   'a swatch differing in S or L would confound hue preference with brightness'
 );
 check('every hue has a distinct hex', new Set(COLOUR_POOL.map((c) => c.hex)).size === 10);
-check('every hue has a plain name for the reveal', COLOUR_POOL.every((c) => c.name && !/[A-Z]/.test(c.name)));
+check(
+  'every hue has a plain English name for the reveal',
+  COLOUR_POOL.every((c) => {
+    const name = translate(DEFAULT_LANGUAGE, colourKey(c));
+    return name && name !== colourKey(c) && !/[A-Z]/.test(name);
+  }),
+  'a missing entry renders as the key itself, e.g. "This T-shirt is in colour.teal."'
+);
 check(
   'no near-white or unsaturated swatch in the pool',
   COLOUR_POOL.every((c) => c.s > 0.3),
   'the prototype "White" and "Original" swatches must be excluded'
+);
+
+/* ---------------- languages ----------------
+ *
+ * The study runs in three languages, which makes the wording a variable rather than a
+ * presentation detail. Most of what follows is about keeping the three versions the
+ * same study rather than three similar ones. */
+
+section('Languages and catalogues');
+
+check('three languages are offered', LANGUAGES.length === 3, LANGUAGE_CODES.join(', '));
+check('English is the default', DEFAULT_LANGUAGE === 'en');
+check(
+  'every code is a two-letter tag the lang attribute understands',
+  LANGUAGE_CODES.every((c) => /^[a-z]{2}$/.test(c)),
+  'font fallback and screen-reader voice both key off <html lang>'
+);
+/* A participant who needs the picker cannot read the English name of their own
+   language, so an all-ASCII option list would be unusable by exactly the people it is
+   for. */
+check(
+  'the non-English options are named in their own scripts',
+  LANGUAGES.filter((l) => l.code !== 'en').every((l) => /[^\u0000-\u007F]/.test(l.endonym)),
+  JSON.stringify(LANGUAGES.map((l) => l.endonym))
+);
+
+for (const code of LANGUAGE_CODES) {
+  const missing = missingKeys(code);
+  const stale = staleKeys(code);
+
+  check(
+    `the ${code} catalogue covers every key`,
+    missing.length === 0,
+    `${missing.length} missing, falling back to English: ${missing.slice(0, 8).join(', ')}`
+  );
+  check(
+    `the ${code} catalogue has no keys English has dropped`,
+    stale.length === 0,
+    `${stale.length} stale and unreachable: ${stale.slice(0, 8).join(', ')}`
+  );
+}
+
+/* Placeholders are the failure that survives proofreading.
+ *
+ * A translator working from a list of sentences can easily drop `{agreeButton}` or
+ * write `{agree_button}`, and the result reads perfectly well right up to the moment it
+ * renders: the consent form then tells the participant to press a button it does not
+ * name, or the ineligibility message quotes no years at all. Nothing about the Sinhala
+ * or the Tamil looks wrong, so this will not be caught by reading it. */
+const english = catalogueFor(DEFAULT_LANGUAGE);
+const placeholdersIn = (s) => (String(s).match(/\{\w+\}/g) || []).sort().join(',');
+
+for (const code of LANGUAGE_CODES.filter((c) => c !== DEFAULT_LANGUAGE)) {
+  const catalogue = catalogueFor(code);
+  const mismatched = Object.keys(english).filter(
+    (key) =>
+      typeof catalogue[key] === 'string' &&
+      placeholdersIn(catalogue[key]) !== placeholdersIn(english[key])
+  );
+  check(
+    `the ${code} catalogue keeps every placeholder intact`,
+    mismatched.length === 0,
+    mismatched.map((k) => `${k}: expected ${placeholdersIn(english[k]) || 'none'}`).join('; ')
+  );
+}
+
+/* The consent form has to name the button it is telling people to press, and the button
+   label is itself translated, so the two are bound together through a placeholder
+   rather than both being typed out. */
+check(
+  'the consent body names the agree button rather than quoting it',
+  LANGUAGE_CODES.every((code) => translate(code, 'consent.body').includes('{agreeButton}')),
+  'a quoted label will drift from the button the moment either is reworded'
+);
+
+/* Ten hues at one saturation and one lightness: the name is the only thing separating
+   them, and the reveal names one back to the participant as the colour they chose. Two
+   hues sharing a word in some language would describe two different treatments
+   identically for the participants reading it. */
+for (const code of LANGUAGE_CODES) {
+  const names = COLOUR_POOL.map((c) => translate(code, colourKey(c)));
+  check(
+    `the ten ${code} colour names are all distinct`,
+    new Set(names).size === 10,
+    `${10 - new Set(names).size} collision(s): ${names.join(', ')}`
+  );
+  check(
+    `no ${code} colour name is left as its key`,
+    names.every((n) => !n.startsWith('colour.')),
+    names.filter((n) => n.startsWith('colour.')).join(', ')
+  );
+}
+
+/* The eight scale items are the outcome measures. An item quietly falling back to
+   English would mean some participants answered a different question from the rest of
+   their own language group, which is not visible anywhere in the exported data. */
+for (const code of LANGUAGE_CODES.filter((c) => c !== DEFAULT_LANGUAGE)) {
+  const untranslated = QUESTIONNAIRE_ITEM_IDS.filter(
+    (id) => translate(code, `item.${id}`) === translate(DEFAULT_LANGUAGE, `item.${id}`)
+  );
+  check(
+    `all eight scale items are translated into ${code}`,
+    untranslated.length === 0,
+    `still English: ${untranslated.join(', ')}`
+  );
+  check(
+    `the ${code} Likert anchors are translated`,
+    ['questionnaire.likertMin', 'questionnaire.likertMax'].every(
+      (key) => translate(code, key) !== translate(DEFAULT_LANGUAGE, key)
+    ),
+    'an English anchor on a translated scale changes what the midpoint means'
+  );
+}
+
+/* The server-side half has no fallback report of its own, so it is walked here. Its
+   groups are what buildControlBundle slices by, which makes a missing group a blank
+   label on a control rather than a missing sentence in prose. */
+for (const code of LANGUAGE_CODES) {
+  const reference = ALL_SERVER_STRINGS[DEFAULT_LANGUAGE];
+  const gaps = [];
+
+  for (const [section_, entries] of Object.entries(reference)) {
+    for (const [key, value] of Object.entries(entries)) {
+      if (typeof value === 'string') {
+        if (!ALL_SERVER_STRINGS[code]?.[section_]?.[key]) gaps.push(`${section_}.${key}`);
+        continue;
+      }
+      for (const inner of Object.keys(value)) {
+        if (!ALL_SERVER_STRINGS[code]?.[section_]?.[key]?.[inner]) {
+          gaps.push(`${section_}.${key}.${inner}`);
+        }
+      }
+    }
+  }
+
+  check(
+    `the ${code} server catalogue is complete`,
+    gaps.length === 0,
+    `${gaps.length} falling back to English: ${gaps.slice(0, 8).join(', ')}`
+  );
+}
+
+/* Changing language redraws the consent screen, and the tick has to survive the redraw.
+   Losing it puts the participant back behind the "please confirm" error having already
+   agreed, which reads as the study rejecting their consent. The state is carried in a
+   box rather than by value precisely because the redraw happens later than the render,
+   so this pins that the box is what gets passed. */
+const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+check(
+  'the language picker is handed the consent state, not a snapshot of it',
+  /languageField\(agreed\)/.test(appSource) && /renderConsent\(\{ agreed: agreed\.value \}\)/.test(appSource),
+  'passing agreed.value into languageField would freeze the tick at first paint'
+);
+check(
+  'the picker only exists on the consent screen',
+  (appSource.match(/languageField\(/g) || []).length === 2,
+  'switching language after consent would mean reading one wording and answering another'
+);
+
+/* The calibration sequence.
+ *
+ * The two palettes are identical by design, and a participant read the second as the
+ * first redisplayed in error -- then answers the same question twice, which is a
+ * corruption no validation catches because both hexes come back populated and in range.
+ * The announcement screens are the only thing standing between that participant and a
+ * silently wrong pair of colours, so the wiring that puts one in front of each palette
+ * is worth pinning rather than trusting to a later reading of the file. */
+const calibrationStart = appSource.indexOf('function renderCalibration');
+const calibrationEnd = appSource.indexOf('Stage 3.5', calibrationStart);
+const calibrationSource = appSource.slice(calibrationStart, calibrationEnd);
+check(
+  'the calibration source was located',
+  calibrationStart !== -1 && calibrationEnd !== -1 && calibrationSource.includes('showBothColours'),
+  'the checks below are vacuous if this failed -- renderCalibration or the stage after it moved'
+);
+for (const [what, wiring] of [
+  ['calibration opens on the announcement, not the palette', /introLiked\(\);\s*\}/],
+  ['the first announcement leads to the first palette', /introLikedTitle'\), onContinue: askLiked/],
+  ['the first palette leads to the second announcement', /liked = colour\.hex; introDisliked\(\)/],
+  ['the second announcement leads to the second palette', /onContinue: askDisliked/],
+  ['the second palette leads to both colours being shown', /showBothColours\(\)/],
+  ['showing both colours leads to the reveal', /onclick: \(\) => renderReveal\(\)/]
+]) {
+  check(what, wiring.test(calibrationSource));
+}
+
+/* An announcement that times out is missed by exactly the inattentive participant it
+   was added for, so it must wait for a click. */
+check(
+  'the announcements wait for a click rather than timing out',
+  !/setTimeout|setInterval/.test(calibrationSource),
+  'a self-dismissing screen defeats the point of having one'
+);
+
+/* The summary confirms what was stored, so the store has to have happened first; and a
+   participant who abandons the tab while reading it must not lose two answered
+   questions. Both require the save to sit on the palette, not on the summary. */
+const saveAt = calibrationSource.indexOf("api('/api/calibration'");
+check(
+  'both colours are saved before the summary is shown',
+  saveAt !== -1 && saveAt < calibrationSource.indexOf('function showBothColours'),
+  'saving after the summary would lose both choices if the tab were closed on it'
+);
+
+/* Swatch, role and name for each of the two. The names are what makes the screen work
+   for a participant who cannot tell the two hues apart, and the roles are the whole
+   reassurance the screen exists to give. */
+check(
+  'each summary tile carries a role and a spelled-out name',
+  /summaryTile\(likedColour, t\('calibration\.mostLiked'\)\)/.test(calibrationSource) &&
+    /summaryTile\(dislikedColour, t\('calibration\.leastLiked'\)\)/.test(calibrationSource) &&
+    /class: 'summary-name', text: name/.test(calibrationSource),
+  'without both, the screen is two anonymous squares'
+);
+
+/* Sinhala and Tamil are AI-translated and unverified, so these check shape rather than
+   meaning: the bracketing the disclosure is written in, and that a translator has not
+   left an English string sitting in a non-English catalogue. */
+for (const { code } of LANGUAGES) {
+  const note = translate(code, 'calibration.summaryNote');
+  check(
+    `the ${code} randomisation note keeps its brackets`,
+    note.startsWith('(') && note.endsWith(')'),
+    `got: ${note}`
+  );
+  const intro = translate(code, 'calibration.introLikedTitle');
+  check(
+    `the ${code} announcements are translated`,
+    code === 'en' || intro !== translate('en', 'calibration.introLikedTitle'),
+    'an English announcement in a Sinhala or Tamil run means the catalogue fell back'
+  );
+}
+
+/* The disclosure says one of two colours is chosen at random. Saying which one, or
+   naming the design, would hand the participant their own cell. */
+const noteLeak = ['Liked', 'Disliked', 'condition', 'level']
+  .filter((term) => LANGUAGE_CODES.some((code) =>
+    translate(code, 'calibration.summaryNote').includes(term)));
+check(
+  'the randomisation note does not name the condition or the design',
+  noteLeak.length === 0,
+  `leaked: ${noteLeak.join(', ')}`
+);
+
+/* An unknown code must land on English rather than on a screen of key names. Old
+   session documents predate the field entirely, and those participants are mid-study. */
+check(
+  'an unknown or absent language resolves to English',
+  translate(undefined, 'common.continue') === 'Continue' &&
+    translate('xx', 'common.continue') === 'Continue' &&
+    customisationStrings(null).cta === 'Start customising',
+  'a session written before the picker existed must still render'
 );
 
 /* ---------------- cell map ---------------- */
@@ -206,26 +473,40 @@ check(
    they do. It is also the one participant-facing text that differs by level, so it is
    the obvious place for the design to leak. */
 
+const englishChanges = changeStrings(DEFAULT_LANGUAGE);
+const changeListFor = (level) =>
+  CUSTOMISATION_CHANGE_KEYS_BY_LEVEL[level].map((key) => englishChanges[key]);
+
 check(
   'Level 1 is promised no changes',
-  CUSTOMISATION_CHANGES_BY_LEVEL[1].length === 0
+  CUSTOMISATION_CHANGE_KEYS_BY_LEVEL[1].length === 0
 );
 check(
   'the promised changes match the controls served at each level',
-  [2, 3].every((l) => CUSTOMISATION_CHANGES_BY_LEVEL[l].length === CONTROLS_BY_LEVEL[l].length),
-  `level 2: ${CUSTOMISATION_CHANGES_BY_LEVEL[2].length} promised for ` +
+  [2, 3].every((l) => CUSTOMISATION_CHANGE_KEYS_BY_LEVEL[l].length === CONTROLS_BY_LEVEL[l].length),
+  `level 2: ${CUSTOMISATION_CHANGE_KEYS_BY_LEVEL[2].length} promised for ` +
     `${CONTROLS_BY_LEVEL[2].length} controls; level 3: ` +
-    `${CUSTOMISATION_CHANGES_BY_LEVEL[3].length} for ${CONTROLS_BY_LEVEL[3].length}`
+    `${CUSTOMISATION_CHANGE_KEYS_BY_LEVEL[3].length} for ${CONTROLS_BY_LEVEL[3].length}`
+);
+/* Named the same as the controls they describe, so the two lists can be compared rather
+   than eyeballed. A key here with no control behind it promises a change the
+   participant will look for and not find. */
+check(
+  'each promised change names a control that level actually gets',
+  [2, 3].every((l) =>
+    CUSTOMISATION_CHANGE_KEYS_BY_LEVEL[l].every((key) => CONTROLS_BY_LEVEL[l].includes(key))
+  ),
+  JSON.stringify(CUSTOMISATION_CHANGE_KEYS_BY_LEVEL)
 );
 check(
   'the Level 2 list never mentions skin or tone',
-  !/skin|tone|colour of the model/i.test(CUSTOMISATION_CHANGES_BY_LEVEL[2].join(' ')),
-  `this is the blinding boundary: ${JSON.stringify(CUSTOMISATION_CHANGES_BY_LEVEL[2])}`
+  !/skin|tone|colour of the model/i.test(changeListFor(2).join(' ')),
+  `this is the blinding boundary: ${JSON.stringify(changeListFor(2))}`
 );
 check(
   'the Level 3 list names the skin-tone control',
-  /skin tone/i.test(CUSTOMISATION_CHANGES_BY_LEVEL[3].join(' ')),
-  JSON.stringify(CUSTOMISATION_CHANGES_BY_LEVEL[3])
+  /skin tone/i.test(changeListFor(3).join(' ')),
+  JSON.stringify(changeListFor(3))
 );
 /* Pinned rather than pattern-matched. This one string decides whether the skin-tone
    measure reads as a preference revealed or as an instruction followed, so it is not
@@ -233,17 +514,34 @@ check(
    construct, and the write-up has to change with it. */
 check(
   'the Level 3 skin-tone wording is exactly the agreed instruction',
-  CUSTOMISATION_CHANGES_BY_LEVEL[3].at(-1) === "Change the model's skin tone to match yours",
-  `found ${JSON.stringify(CUSTOMISATION_CHANGES_BY_LEVEL[3].at(-1))}; ` +
+  changeListFor(3).at(-1) === "Change the model's skin tone to match yours",
+  `found ${JSON.stringify(changeListFor(3).at(-1))}; ` +
     'the study is written up as matching under instruction'
 );
+/* The instruction has to survive translation, because it is the instruction that makes
+   the measure "matching under instruction" rather than a preference. A Sinhala or Tamil
+   participant told merely to change the tone is in a different condition from an
+   English one told to match their own. */
+for (const code of LANGUAGE_CODES.filter((c) => c !== DEFAULT_LANGUAGE)) {
+  const item = changeStrings(code).skinTone;
+  check(
+    `the ${code} skin-tone instruction is translated, not left in English`,
+    item !== englishChanges.skinTone,
+    'falling back here silently puts that participant in the English wording'
+  );
+  check(
+    `the ${code} skin-tone instruction still asks them to match their own`,
+    /ඔබගේ සම|உங்கள் நிறத்திற்கு/.test(item),
+    `found ${JSON.stringify(item)}`
+  );
+}
 
 /* ---------------- reveal wording ---------------- */
 
 section('Reveal wording');
 
-const likedSentence = revealSentence('teal', 'Liked');
-const dislikedSentence = revealSentence('teal', 'Disliked');
+const likedSentence = revealSentence('teal', 'Liked', DEFAULT_LANGUAGE);
+const dislikedSentence = revealSentence('teal', 'Disliked', DEFAULT_LANGUAGE);
 
 check('the liked reveal names the colour', likedSentence.includes('teal'));
 check('the two reveals differ only in the final clause',
@@ -259,7 +557,10 @@ check(
   Math.abs(likedSentence.length - dislikedSentence.length) <= 2,
   'matched length keeps tone comparable across conditions'
 );
-check('an unnamed colour still yields a sentence', revealSentence(null, 'Liked').includes('this colour'));
+check(
+  'an unnamed colour still yields a sentence',
+  revealSentence(null, 'Liked', DEFAULT_LANGUAGE).includes('this colour')
+);
 check(
   'no em dash survives in either reveal',
   ![likedSentence, dislikedSentence].some((s) => s.includes('\u2014')),
@@ -275,6 +576,41 @@ check(
   }),
   `\n      ${JSON.stringify(likedSentence)}`
 );
+
+/* The same properties in the other two languages. The reveal is the manipulation, so a
+   translation that made one condition's sentence longer, louder or differently shaped
+   would be a difference between conditions that has nothing to do with the colour. */
+for (const code of LANGUAGE_CODES) {
+  const liked = revealSentence('teal', 'Liked', code);
+  const disliked = revealSentence('teal', 'Disliked', code);
+
+  check(
+    `the ${code} reveal is two lines with the attribution bracketed below`,
+    [liked, disliked].every((s) => {
+      const lines = s.split('\n');
+      return lines.length === 2 && lines[1].startsWith('(') && lines[1].endsWith(')');
+    }),
+    `\n      ${JSON.stringify(liked)}`
+  );
+  check(
+    `the ${code} reveal names the colour in that language`,
+    liked.includes(translate(code, 'colour.teal')),
+    `expected ${translate(code, 'colour.teal')} in ${JSON.stringify(liked)}`
+  );
+  /* Looser than the two-character tolerance English gets. Sinhala and Tamil both need
+     more words for "least" than for "most", so an exact match is not achievable; what
+     matters is that neither condition gets a visibly weightier sentence. */
+  check(
+    `the ${code} reveals stay close in length`,
+    Math.abs(liked.length - disliked.length) <= 12,
+    `liked ${liked.length}, disliked ${disliked.length}: one condition reads heavier`
+  );
+  check(
+    `the ${code} reveals differ only in the final clause`,
+    liked.split('\n')[0] === disliked.split('\n')[0],
+    'the stem naming the colour must be identical across conditions'
+  );
+}
 
 /* ---------------- engagement ---------------- */
 
@@ -347,26 +683,31 @@ check('Level 3 stores skin tone', 'skinTone' in customisationForLevel(3, { ...un
 
 section('Control bundle integrity');
 
+/* Every level in every language: the bundle is composed per session from both, so a
+   translation long enough to contain an unescaped quote or a line terminator would
+   produce a bundle that parses on one language and not another. */
 for (const level of [1, 2, 3]) {
-  const bundle = buildControlBundle(CONTROLS_BY_LEVEL[level]);
-  let parsed = true;
-  try {
-    // eslint-disable-next-line no-new-func
-    new Function('ctx', bundle);
-  } catch (err) {
-    parsed = false;
-    failures.push(`level ${level} bundle does not parse: ${err.message}`);
+  for (const code of LANGUAGE_CODES) {
+    const bundle = buildControlBundle(CONTROLS_BY_LEVEL[level], code);
+    let parsed = true;
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function('ctx', bundle);
+    } catch (err) {
+      parsed = false;
+      failures.push(`level ${level} bundle in ${code} does not parse: ${err.message}`);
+    }
+    check(`the level ${level} bundle parses in ${code}`, parsed);
+    check(
+      `the level ${level} bundle returns a collect function in ${code}`,
+      bundle.includes('return { collect:')
+    );
   }
-  check(`the level ${level} bundle parses`, parsed);
-  check(
-    `the level ${level} bundle returns a collect function`,
-    bundle.includes('return { collect:')
-  );
 }
 
-const level1Bundle = buildControlBundle(CONTROLS_BY_LEVEL[1]);
-const level2Bundle = buildControlBundle(CONTROLS_BY_LEVEL[2]);
-const level3Bundle = buildControlBundle(CONTROLS_BY_LEVEL[3]);
+const level1Bundle = buildControlBundle(CONTROLS_BY_LEVEL[1], DEFAULT_LANGUAGE);
+const level2Bundle = buildControlBundle(CONTROLS_BY_LEVEL[2], DEFAULT_LANGUAGE);
+const level3Bundle = buildControlBundle(CONTROLS_BY_LEVEL[3], DEFAULT_LANGUAGE);
 
 check(
   'the level 1 bundle mentions no control at all',
@@ -374,7 +715,7 @@ check(
 );
 check(
   'the level 2 bundle contains no skin-tone control',
-  !/Model tone|toneTrackGradient|toneLabelFor/.test(level2Bundle),
+  !/Model tone|toneTrackGradient|toneBandFor/.test(level2Bundle),
   'this is the blinding boundary: a Level 2 bundle must not hint the control exists'
 );
 check('the level 2 bundle contains the other three controls',
@@ -384,6 +725,54 @@ check('the level 3 bundle contains the skin-tone control', /Model tone/.test(lev
 check(
   'the level 3 bundle is a superset of level 2',
   /Custom text/.test(level3Bundle) && /Sleeve length/.test(level3Bundle) && /Neckline/.test(level3Bundle)
+);
+
+/* ---------------- the same boundary, in the other two languages ----------------
+ *
+ * The English checks above catch a leak only if the leaked word happens to be English.
+ * Once the labels are translated the bundle for a Tamil Level 2 participant contains
+ * Tamil, and "Model tone" appearing nowhere in it proves nothing at all. What has to
+ * hold is that the skinTone group is absent whatever language it would have been
+ * written in, which is what controlStrings is responsible for and what this pins. */
+
+for (const code of LANGUAGE_CODES) {
+  const l2 = buildControlBundle(CONTROLS_BY_LEVEL[2], code);
+  const l3 = buildControlBundle(CONTROLS_BY_LEVEL[3], code);
+  const toneWords = Object.values(ALL_SERVER_STRINGS[code].control.skinTone);
+
+  check(
+    `the level 2 bundle in ${code} carries no skin-tone group`,
+    !/"skinTone"/.test(l2),
+    'the group name itself would tell a reader a fourth control exists'
+  );
+  check(
+    `the level 2 bundle in ${code} carries none of the skin-tone wording`,
+    !toneWords.some((word) => l2.includes(word)),
+    `one of ${JSON.stringify(toneWords)} reached a Level 2 participant`
+  );
+  check(
+    `the level 3 bundle in ${code} does carry the skin-tone wording`,
+    toneWords.every((word) => l3.includes(word)),
+    'a missing label leaves the control on screen with nothing naming it'
+  );
+  check(
+    `the level 1 bundle in ${code} carries no control wording at all`,
+    !/var strings = \{"/.test(buildControlBundle(CONTROLS_BY_LEVEL[1], code)),
+    'a level with no controls should be handed an empty strings object'
+  );
+}
+
+/* Grouping is what the filter above relies on. A label filed under `text` that actually
+   describes the tone slider would be shipped to Level 2 by a function doing exactly
+   what it was told, and no test of controlStrings itself would notice. */
+check(
+  'no control group leaks another control\'s wording',
+  ['text', 'sleeve', 'neck'].every((group) =>
+    Object.values(controlStrings(DEFAULT_LANGUAGE, [group])[group]).every(
+      (word) => !/skin|tone/i.test(word)
+    )
+  ),
+  'a tone word filed under another control would be served to every level'
 );
 
 /* ---------------- the deploy bundler's helpers must not break the controls ----------
@@ -434,9 +823,39 @@ try {
   check('it exposes the font bounds the text control needs',
     typeof renderer.FONT_MIN === 'number' && typeof renderer.FONT_MAX === 'number');
   check('it exposes the tone helpers the skin-tone control needs',
-    typeof renderer.toneTrackGradient === 'function' && typeof renderer.toneLabelFor === 'function');
+    typeof renderer.toneTrackGradient === 'function' && typeof renderer.toneBandFor === 'function');
   check('the tone gradient is a usable css value', renderer.toneTrackGradient().startsWith('linear-gradient('));
-  check('tone labels span the slider', renderer.toneLabelFor(0) === 'Lightest' && renderer.toneLabelFor(1) === 'Darkest');
+  check('tone bands span the slider',
+    renderer.toneBandFor(0) === 'lightest' && renderer.toneBandFor(1) === 'darkest');
+  /* The renderer names bands; the bundle supplies the words. If the two sets ever drift
+     apart the readout renders as `undefined` beside the slider, which looks like a
+     rendering fault rather than a missing translation. */
+  check(
+    'every band the renderer can return has a word in every language',
+    [0, 0.2, 0.4, 0.7, 1].every((t) => {
+      const band = renderer.toneBandFor(t);
+      return LANGUAGE_CODES.every((code) =>
+        typeof controlStrings(code, ['skinTone']).skinTone[band] === 'string'
+      );
+    }),
+    'a band with no label shows as "undefined" next to the slider'
+  );
+  /* The shirt print is drawn on a canvas with its own font string, separate from the
+     stylesheet. Left as Inter alone, a participant typing in their own script gets a
+     row of empty boxes printed on the garment they are about to rate. */
+  const rendererSource = await readFile(
+    new URL('../public/renderer/tshirt-renderer.js', import.meta.url), 'utf8'
+  );
+  check(
+    'the canvas font stack can draw Sinhala and Tamil',
+    /Noto Sans Sinhala/.test(rendererSource) && /Noto Sans Tamil/.test(rendererSource),
+    'custom text in either script would print as tofu boxes on the shirt'
+  );
+  check(
+    'the canvas font still prefers Inter for Latin text',
+    /const TEXT_FONT_STACK =\s*\n?\s*'Inter,/.test(rendererSource),
+    'the print metrics the prototype was tuned against are Inter\'s'
+  );
 } catch (err) {
   failures.push(`the renderer could not be imported: ${err.message}`);
 }
@@ -454,24 +873,35 @@ const hostSource = await readFile(new URL('../public/stage4/host.js', import.met
 
 check(
   'the no-controls view invites a pause and names the button',
-  /const LOOK_HINT = 'Take a moment to look at this T-shirt, then click Continue\.';/.test(hostSource)
+  translate(DEFAULT_LANGUAGE, 'stage4.lookHint') ===
+    'Take a moment to look at this T-shirt, then click {continueButton}.'
 );
 check(
   'the controls view invites a pause and names the button',
-  /const CUSTOMISE_HINT = 'Take a moment to customise and then click Continue when you are ready\.';/.test(
-    hostSource
-  )
+  translate(DEFAULT_LANGUAGE, 'stage4.customiseHint') ===
+    'Take a moment to customise and then click {continueButton} when you are ready.'
 );
 check(
   'both hints are actually rendered, not merely declared',
-  /text: LOOK_HINT/.test(hostSource) && /text: CUSTOMISE_HINT/.test(hostSource),
+  /text: lookHint\(\)/.test(hostSource) && /text: customiseHint\(\)/.test(hostSource),
   'a declared but unused hint is a line no participant ever sees'
 );
-/* Both lines name the button, so renaming the button silently makes both of them point
-   at something the participant cannot find. */
+/* Both lines name the button by interpolation rather than by quoting a word, so the
+   instruction cannot end up pointing at a label that was translated differently. In
+   Sinhala and Tamil there is no capitalisation to mark the name out, which makes a
+   mismatch between the two much harder for a participant to reason past. */
 check(
-  'the button both hints name is still labelled Continue',
-  /h\('button', \{ class: 'cta', text: 'Continue' \}\)/.test(hostSource),
+  'both hints name the button through a placeholder',
+  LANGUAGE_CODES.every((code) =>
+    ['stage4.lookHint', 'stage4.customiseHint'].every((key) =>
+      translate(code, key).includes('{continueButton}')
+    )
+  ),
+  'a hard-coded button name in a translation will drift from the button'
+);
+check(
+  'the button both hints name takes its label from the same key',
+  /h\('button', \{ class: 'cta', text: t\('common\.continue'\) \}\)/.test(hostSource),
   'rename the button and the instructions have to be reworded with it'
 );
 
@@ -480,12 +910,12 @@ check(
    it to name. */
 check(
   'the no-controls view puts its instruction above the garment',
-  /text: LOOK_HINT \}\),\s*\n\s*frame,/.test(hostSource),
+  /text: lookHint\(\) \}\),\s*\n\s*frame,/.test(hostSource),
   'the instruction must precede the frame, not follow it'
 );
 check(
   'the controls view puts its instruction above the garment',
-  /photoCol\.prepend\(h\('p', \{ class: 'stage4-instruction', text: CUSTOMISE_HINT \}\)\);/.test(
+  /photoCol\.prepend\(h\('p', \{ class: 'stage4-instruction', text: customiseHint\(\) \}\)\);/.test(
     hostSource
   ),
   'it belongs at the head of the sticky photo column'
@@ -501,9 +931,27 @@ check(
    were told to pause, which lands in stage4CompletionSeconds. */
 check(
   'both hints are styled at the same weight',
-  (hostSource.match(/class: 'stage4-instruction', text: (LOOK|CUSTOMISE)_HINT/g) || []).length === 2,
+  (hostSource.match(/class: 'stage4-instruction', text: (look|customise)Hint\(\)/g) || []).length === 2,
   'one hint is styled differently from the other'
 );
+/* The same matching has to survive translation. If the Tamil customise hint urged more
+   patience than the Tamil look hint, the timing difference between levels would be
+   partly a difference in what those participants were told to do. */
+for (const code of LANGUAGE_CODES.filter((c) => c !== DEFAULT_LANGUAGE)) {
+  const look = translate(code, 'stage4.lookHint');
+  const customise = translate(code, 'stage4.customiseHint');
+  check(
+    `the two ${code} hints are both translated`,
+    look !== translate(DEFAULT_LANGUAGE, 'stage4.lookHint') &&
+      customise !== translate(DEFAULT_LANGUAGE, 'stage4.customiseHint'),
+    'one level falling back to English is a difference between conditions'
+  );
+  check(
+    `the two ${code} hints stay comparable in length`,
+    Math.abs(look.length - customise.length) <= 20,
+    `look ${look.length}, customise ${customise.length}: one level is urged harder`
+  );
+}
 
 const cssSource = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
 
@@ -699,6 +1147,86 @@ check(
   'src/index.js must not pass preview to createRouter'
 );
 
+/* ---------------- the Durable Object must forward every argument ----------------
+ *
+ * src/data.js re-declares each StudyService method so the Worker can call it over RPC.
+ * A declaration that omits an argument is silent in every way that matters: it is not a
+ * type error, it does not throw, and the argument simply arrives as undefined so the
+ * service applies its default and returns a perfectly normal-looking response.
+ *
+ * Worse, it cannot fail locally. The dev server holds a StudyService directly and never
+ * crosses this boundary, so every check in this file passes while production quietly
+ * drops the value. That is precisely what happened to the session language: it was
+ * accepted, validated, and then defaulted to English for every real participant.
+ *
+ * Compared by arity rather than by name because that is what the omission changes. */
+
+section('Durable Object argument forwarding');
+
+const dataSource = await readFile(new URL('../src/data.js', import.meta.url), 'utf8');
+const serviceSource = await readFile(new URL('../src/study-service.js', import.meta.url), 'utf8');
+
+/* Counted from the source rather than from Function.prototype.length, which is not the
+   number of parameters a method has: it stops at the first one with a default. The
+   method this whole section exists for, `startSession({ language } = {})`, reports a
+   length of 0, so an arity comparison would have sailed past the exact bug it was
+   written to catch. */
+function paramList(source, name) {
+  const match = source.match(new RegExp(`(?:async\\s+)?${name}\\s*\\(`));
+  if (!match) return null;
+
+  let depth = 0;
+  let current = '';
+  const params = [];
+  for (let i = match.index + match[0].length; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === '(' || ch === '{' || ch === '[') depth++;
+    else if (ch === ')' && depth === 0) break;
+    else if (ch === ')' || ch === '}' || ch === ']') depth--;
+
+    if (ch === ',' && depth === 0) { params.push(current.trim()); current = ''; continue; }
+    current += ch;
+  }
+  if (current.trim()) params.push(current.trim());
+  return params.filter(Boolean);
+}
+
+const serviceMethods = Object.getOwnPropertyNames(StudyService.prototype)
+  .filter((name) => name !== 'constructor' && typeof StudyService.prototype[name] === 'function');
+
+for (const name of serviceMethods) {
+  /* previewAssign is dev-only and deliberately absent from the RPC surface: exposing it
+     there would put a forced-assignment route one call away from production. */
+  if (name === 'previewAssign') continue;
+
+  const expected = paramList(serviceSource, name);
+  const declared = paramList(dataSource, name);
+
+  check(
+    `the Durable Object exposes ${name}`,
+    declared !== null,
+    'a service method with no pass-through is unreachable in production'
+  );
+  if (declared === null || expected === null) continue;
+
+  check(
+    `the Durable Object declares all ${expected.length} parameter(s) of ${name}`,
+    declared.length >= expected.length,
+    `data.js declares (${declared.join(', ')}), the service takes (${expected.join(', ')})`
+  );
+
+  /* Declaring them is half of it. The forwarding call has to hand them on, and a
+     pass-through that accepts an argument and then calls the service with none looks
+     entirely correct at a glance. */
+  const call = dataSource.match(new RegExp(`\\)\\.${name}\\(([^)]*)\\)`));
+  const passed = call ? call[1].split(',').map((s) => s.trim()).filter(Boolean) : [];
+  check(
+    `the Durable Object passes on all ${expected.length} argument(s) of ${name}`,
+    passed.length >= expected.length,
+    `declared (${declared.join(', ')}) but calls ${name}(${call ? call[1] : '?'})`
+  );
+}
+
 /* public/ is the only directory uploaded as static assets, so a preview page or fetch
    living there would be readable by any participant who opened dev tools. */
 const publicFiles = await readdir(new URL('../public/', import.meta.url), { recursive: true });
@@ -736,8 +1264,8 @@ async function integration(base) {
     return { status: res.status, json, text };
   };
 
-  async function walkTo(stage, birthYear = 1975) {
-    const start = await post('/api/session/start');
+  async function walkTo(stage, birthYear = 1975, language = 'en') {
+    const start = await post('/api/session/start', { language });
     const sessionId = start.json.sessionId;
     if (stage === 'consent') return { sessionId };
 
@@ -766,6 +1294,10 @@ async function integration(base) {
   const assetPaths = [
     '/', '/app.js', '/styles.css',
     '/shared/study-config.js', '/shared/colour.js',
+    /* The catalogues are static imports of app.js, so any one of them 404ing takes the
+       whole module graph down and leaves a blank page rather than an English page. */
+    '/shared/languages.js', '/shared/i18n.js',
+    '/shared/strings/en.js', '/shared/strings/si.js', '/shared/strings/ta.js',
     '/renderer/tshirt-renderer.js', '/stage4/host.js',
     '/assets/combos/manifest.json'
   ];
@@ -818,6 +1350,80 @@ async function integration(base) {
 
   const noSession = await post('/api/onboarding', { birthYear: 1975 });
   check('a request without a session id is rejected', noSession.status === 400);
+
+  /* language, end to end.
+   *
+   * The choice is made before there is a session to hold it, so it travels with the
+   * request that creates one. What matters here is that it comes back on resume: a
+   * participant who returns on a second device has nothing stored locally, and without
+   * the server's copy the rest of their study would silently switch to English
+   * mid-way -- including the eight scale items. */
+  const tamil = await post('/api/session/start', { language: 'ta' });
+  const tamilResume = await post('/api/session/resume', {}, tamil.json.sessionId);
+  check(
+    'the language chosen at consent is stored on the session',
+    tamilResume.json?.language === 'ta',
+    `resume returned ${JSON.stringify(tamilResume.json?.language)}`
+  );
+
+  const noLanguage = await post('/api/session/start');
+  const noLanguageResume = await post('/api/session/resume', {}, noLanguage.json.sessionId);
+  check(
+    'a session started without a language defaults to English',
+    noLanguageResume.json?.language === 'en',
+    'older clients and cached bundles must still be able to start'
+  );
+
+  const badLanguage = await post('/api/session/start', { language: 'fr' });
+  check(
+    'an unoffered language is refused rather than quietly defaulted',
+    badLanguage.status === 400,
+    `got ${badLanguage.status}: a typo should not become a column of odd values`
+  );
+
+  /* The reveal is composed on the server, so this is the only place the participant's
+     language reaches the manipulation itself. Checked over HTTP rather than by calling
+     revealSentence directly, because what is being tested is that the language survives
+     the round trip from the consent screen to the session document and back out. */
+  const sinhalaJourney = await walkTo('assigned', 1975, 'si');
+  const sinhalaReveal = sinhalaJourney.assignment?.revealSentence || '';
+  check(
+    'the reveal sentence is composed in the session language',
+    /[\u0D80-\u0DFF]/.test(sinhalaReveal),
+    `expected Sinhala, got ${JSON.stringify(sinhalaReveal)}`
+  );
+  /* Which of the two calibration colours the reveal names depends on the condition the
+     session was dealt, so the expected name is derived from the hex that came back
+     rather than assumed to be the liked one. */
+  const shownColour = COLOUR_POOL.find(
+    (c) => c.hex === sinhalaJourney.assignment?.colourHex
+  );
+  check(
+    'the reveal names the colour in that language too',
+    Boolean(shownColour) && sinhalaReveal.includes(translate('si', colourKey(shownColour))),
+    'an English colour name inside a Sinhala sentence means the lookup fell back'
+  );
+
+  /* Stage 4 is where translated wording and the blinding boundary meet, so the served
+     bundle is checked for both at once. */
+  const sinhalaControls = await fetch(base + '/api/stage4/controls', {
+    method: 'POST',
+    headers: { 'X-Session-Id': sinhalaJourney.sessionId }
+  });
+  const sinhalaBundle = sinhalaControls.ok ? await sinhalaControls.text() : '';
+  const sinhalaEnabled = sinhalaJourney.assignment?.customisation?.enabled;
+  check(
+    'the served control bundle is labelled in the session language',
+    !sinhalaEnabled || /[\u0D80-\u0DFF]/.test(sinhalaBundle),
+    'controls came back with no Sinhala in them at all'
+  );
+  check(
+    'the served bundle still respects the level boundary',
+    !Object.values(ALL_SERVER_STRINGS.si.control.skinTone).some(
+      (word) => sinhalaBundle.includes(word) && !sinhalaBundle.includes('"skinTone"')
+    ),
+    'skin-tone wording reached a session without the skin-tone control'
+  );
 
   /* eligibility */
   const ineligible = await walkTo('consent');

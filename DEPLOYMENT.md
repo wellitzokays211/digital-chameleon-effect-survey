@@ -229,6 +229,37 @@ Walk it yourself on a phone and a laptop, and check:
 - [ ] Close the browser mid-task, reopen the URL, and confirm you return to the same
       stage with the same colour.
 
+### Languages
+
+The picker sits at the top of the consent screen and English is preselected. Walk the
+study once in each language, on a phone, and check:
+
+- [ ] Switching language on the consent screen redraws it immediately and keeps the
+      consent checkbox ticked if it already was.
+- [ ] Sinhala and Tamil render as text, not as empty boxes. If they do not, the device is
+      missing both the system face and the downloaded one.
+- [ ] The reveal sentence is in the chosen language and names the colour in it.
+- [ ] Stage 4's controls are labelled in that language, and nothing overflows: the
+      "Locked" badge inside a colour swatch and the three sleeve-length buttons are the
+      tightest places and the first to break.
+- [ ] Typing in Sinhala or Tamil into the custom text field prints readable text **on the
+      shirt**, not boxes. The garment is drawn on a canvas with its own font, separate
+      from the page.
+- [ ] The exported CSV has a `language` column with the right value.
+
+The local cell picker at `/preview` has a language dropdown, which is much faster than
+walking the whole journey three times for each level.
+
+**Do not recruit in Sinhala or Tamil until a native speaker has signed the translations
+off.** `npm run strings` writes `exports/translations-for-review.csv` with every string
+in all three languages and a column to correct each in. The eight questionnaire items and
+the consent body are the ones that matter: they are a validated instrument and an ethics
+document respectively, not interface copy.
+
+If review is not finished when you want to start collecting, the safe move is to reduce
+`LANGUAGES` in `public/shared/languages.js` to the entries that are approved. The picker
+is built from that list, so removing one removes the option.
+
 Then reset the collections one final time.
 
 ---

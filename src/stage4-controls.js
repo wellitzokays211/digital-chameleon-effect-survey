@@ -13,7 +13,13 @@
  * in PRELUDE below. Nothing here ever executes on the server.
  *
  * Behaviour is ported from the prototype, which is the source of truth for how these
- * four controls look and feel. */
+ * four controls look and feel.
+ *
+ * No control contains a word a participant reads. Every label, placeholder, hint and
+ * aria-label comes from `strings`, which buildControlBundle inlines with only the
+ * groups this session's level is entitled to. */
+
+import { controlStrings } from './strings-server.js';
 
 /* ---------------- injected helpers ---------------- */
 
@@ -57,31 +63,25 @@ function pills(parent, options, getCurrent, setNext) {
  * feature. */
 
 function textControl() {
-  var block = controlBlock('Custom text');
+  var s = strings.text;
+  var block = controlBlock(s.label);
 
   var input = h('input', {
     type: 'text',
     class: 'text-input',
-    placeholder: 'Add text to the shirt',
+    placeholder: s.placeholder,
     maxlength: '24',
     value: renderer.getText()
   });
   var area = h('textarea', {
     class: 'text-input',
-    placeholder: 'Add text to the shirt',
+    placeholder: s.placeholder,
     maxlength: '80',
     rows: '3',
     style: 'display:none;resize:none;'
   });
 
-  block.append(
-    input,
-    area,
-    h('p', {
-      class: 'hint',
-      text: 'Click the field (or double-click the text on the shirt) for multi-line editing. Drag the box on the shirt to reposition.'
-    })
-  );
+  block.append(input, area, h('p', { class: 'hint', text: s.hint }));
 
   var overlay = ctx.overlay;
   var frame = ctx.frame;
@@ -183,8 +183,8 @@ function textControl() {
 
   /* font size */
   var value = h('span', { class: 'stepper-value', text: renderer.getFontSize() + 'px' });
-  var down = h('button', { type: 'button', class: 'stepper-btn', 'aria-label': 'Decrease font size', text: '\u2212' });
-  var up = h('button', { type: 'button', class: 'stepper-btn', 'aria-label': 'Increase font size', text: '+' });
+  var down = h('button', { type: 'button', class: 'stepper-btn', 'aria-label': s.decrease, text: '\u2212' });
+  var up = h('button', { type: 'button', class: 'stepper-btn', 'aria-label': s.increase, text: '+' });
 
   function refreshStepper() {
     var size = renderer.getFontSize();
@@ -203,7 +203,7 @@ function textControl() {
 
   block.append(
     h('div', { class: 'stepper-row' },
-      h('span', { class: 'control-label', style: 'font-weight:400;color:var(--ink-soft);', text: 'Font size' }),
+      h('span', { class: 'control-label', style: 'font-weight:400;color:var(--ink-soft);', text: s.fontSize }),
       h('div', { class: 'stepper' }, down, value, up)
     )
   );
@@ -214,7 +214,7 @@ function textControl() {
   block.append(inkRow);
   pills(
     inkRow,
-    [{ value: 'black', label: 'Black' }, { value: 'white', label: 'White' }],
+    [{ value: 'black', label: s.black }, { value: 'white', label: s.white }],
     function () { return renderer.getTextColour(); },
     function (v) { renderer.setTextColour(v); }
   );
@@ -225,13 +225,14 @@ function textControl() {
 /* ---------------- sleeve length ---------------- */
 
 function sleeveControl() {
-  var block = controlBlock('Sleeve length');
+  var s = strings.sleeve;
+  var block = controlBlock(s.label);
   pills(
     block,
     [
-      { value: 'sleeveless', label: 'Sleeveless' },
-      { value: 'short', label: 'Short sleeve' },
-      { value: 'long', label: 'Long sleeve' }
+      { value: 'sleeveless', label: s.sleeveless },
+      { value: 'short', label: s.short },
+      { value: 'long', label: s.long }
     ],
     function () { return renderer.getSleeve(); },
     function (v) {
@@ -246,10 +247,11 @@ function sleeveControl() {
 /* ---------------- neckline ---------------- */
 
 function neckControl() {
-  var block = controlBlock('Neckline');
+  var s = strings.neck;
+  var block = controlBlock(s.label);
   pills(
     block,
-    [{ value: 'round', label: 'Round neck' }, { value: 'v', label: 'V-neck' }],
+    [{ value: 'round', label: s.round }, { value: 'v', label: s.v }],
     function () { return renderer.getNeckline(); },
     function (v) {
       ctx.frame.classList.add('busy');
@@ -269,12 +271,13 @@ function neckControl() {
  * about the act of matching, not about whether it was invited. */
 
 function skinToneControl() {
+  var s = strings.skinTone;
   var dot = h('span', { class: 'swatch-dot' });
   var hexLabel = h('span', { text: '' });
-  var nameLabel = h('span', { text: 'Original' });
+  var nameLabel = h('span', { text: s.original });
 
   var readout = h('span', { class: 'control-readout' }, dot, hexLabel);
-  var block = controlBlock('Model tone', readout);
+  var block = controlBlock(s.label, readout);
 
   var head = block.querySelector('.control-label');
   head.append(' \u2014 ', nameLabel);
@@ -285,19 +288,22 @@ function skinToneControl() {
     min: '0',
     max: '100',
     value: String(Math.round(renderer.getTone() * 100)),
-    'aria-label': 'Model skin tone'
+    'aria-label': s.aria
   });
 
   block.append(
     h('div', { class: 'slider-wrap' }, track, slider),
-    h('div', { class: 'slider-ends' }, h('span', { text: 'Lightest' }), h('span', { text: 'Darkest' }))
+    h('div', { class: 'slider-ends' }, h('span', { text: s.lightest }), h('span', { text: s.darkest }))
   );
 
+  /* The renderer returns which band the slider is in, not the word for it. The words
+     are per-language and arrive with the bundle; the thresholds that decide the band
+     are rendering logic and stay with the renderer, which is shared by every level. */
   function refreshReadout() {
     var t = Number(slider.value) / 100;
     dot.style.background = rt.toneHexFor(t);
     hexLabel.textContent = rt.toneHexFor(t);
-    nameLabel.textContent = renderer.hasAdjustedTone() ? rt.toneLabelFor(t) : 'Original';
+    nameLabel.textContent = renderer.hasAdjustedTone() ? s[rt.toneBandFor(t)] : s.original;
   }
 
   slider.addEventListener('input', function () {
@@ -319,7 +325,12 @@ const CONTROL_SOURCES = {
 };
 
 /* The names the serialised controls may reference. Everything else must be local to
- * the control, because only its own body crosses to the browser. */
+ * the control, because only its own body crosses to the browser.
+ *
+ * `strings` is built per session by buildControlBundle and inlined below, rather than
+ * read off ctx like the rest. It has to be, because it is the one injected name whose
+ * contents differ by level: reading it from ctx would mean the host held every label,
+ * and the host is the same file for everybody. */
 const PRELUDE = [
   'var api = { collectors: [] };',
   'var h = ctx.h;',
@@ -351,8 +362,17 @@ const EPILOGUE = [
  * wearing the shirt rather than what the shirt is. */
 const CONTROL_ORDER = ['text', 'sleeve', 'neck', 'skinTone'];
 
-export function buildControlBundle(controlNames) {
+export function buildControlBundle(controlNames, language) {
   const allowed = CONTROL_ORDER.filter((name) => controlNames.includes(name));
+
+  /* Scoped to `allowed`, not to every control that exists. This line is the blinding
+     boundary for wording: controlStrings returns no skinTone group when skinTone is not
+     in the list, so the word for it is absent from a Level 2 bundle rather than present
+     and unused. JSON.stringify is also what makes the Sinhala and Tamil safe to inline,
+     since it escapes the quotes and the line terminators that would otherwise end the
+     statement early. */
+  const strings = `var strings = ${JSON.stringify(controlStrings(language, allowed))};`;
+
   /* Each control is wrapped separately. The bodies are concatenated into one function,
      so an uncaught throw in an early control would abandon every control after it and
      leave the participant customising less than their level allows. That is a silently
@@ -363,5 +383,5 @@ export function buildControlBundle(controlNames) {
       `try {\n(${CONTROL_SOURCES[name].toString()})();\n} catch (err) {\n` +
       `  ctx.controlFailed(${JSON.stringify(name)}, err);\n}`
   );
-  return [PRELUDE, ...bodies, EPILOGUE].join('\n\n');
+  return [PRELUDE, strings, ...bodies, EPILOGUE].join('\n\n');
 }

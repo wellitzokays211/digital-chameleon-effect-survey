@@ -72,6 +72,9 @@ public/                      served to the browser
   styles.css
   shared/study-config.js     client-safe config — deliberately no design details
   shared/colour.js           HSL to hex, shared so colours cannot drift
+  shared/languages.js        the three languages; one definition of what is valid
+  shared/i18n.js             lookup, English fallback, coverage reporting
+  shared/strings/{en,si,ta}.js   copy for every screen, one file per language
   renderer/tshirt-renderer.js  the prototype's rendering engine, as a module
   stage4/host.js             garment view; executes whatever controls it is sent
   assets/combos/             12 garments + masks, extracted from the prototype
@@ -81,6 +84,7 @@ src/                         the Worker — never served
   router.js                  routes, shared with the Node dev server
   study-service.js           every rule that matters to the experiment
   study-design.js            conditions, levels, cell map, targets
+  strings-server.js          copy that would leak the design if it were served
   stage4-controls.js         the four controls; bundled per level
   stores.js                  MongoDB, Durable Object storage, in-memory
   data.js                    Durable Object holding the Mongo connection
@@ -91,7 +95,8 @@ src/                         the Worker — never served
 tools/
   extract-assets.mjs         prototype -> cacheable image files
   dev-server.mjs             plain-Node server, no Workers runtime needed
-  self-check.mjs             232 automated checks
+  self-check.mjs             338 automated checks
+  export-strings.mjs         all copy in all three languages, as a review CSV
   preview.html               dev-only cell picker, deliberately outside public/
 
 prototype/                   the original file, kept for provenance. Never deployed.
@@ -124,6 +129,12 @@ That is enforced structurally rather than by remembering to hide things:
   session that has not been assigned yet are refused.
 - **No enumerable URL.** The bundle is fetched with the session id in a header, not
   loaded as a `<script src>`, so there is no guessable address whose contents vary.
+- **The words are split the same way as the code.** `src/strings-server.js` holds both
+  reveal clauses, the per-level changes list and every control label; the browser gets
+  only what its own session is entitled to. This matters more than it sounds: once the
+  interface is translated, "the Level 2 bundle does not contain the words *Model tone*"
+  proves nothing about a Tamil participant, so the check is that the `skinTone` group is
+  absent whatever language it would have been written in.
 - **The one route that could bypass all of this does not exist in production.** The cell
   preview is registered only when the host asks for it, and only the dev server asks. See
   "Previewing a particular cell" above.
@@ -157,8 +168,18 @@ withdrawn, and the choice is uniform over whichever of that generation's six cel
 remain open. When every cell for a generation is full the participant sees the
 "no longer accepting responses" screen instead of the task.
 
-Two details worth knowing for the methods section:
+Three details worth knowing for the methods section:
 
+- **Participants are told the draw happens.** The screen closing Stage 3 shows both
+  chosen colours and says one of them will be randomly chosen for their T-shirt. This
+  was added after a respondent reported the two colour screens as a duplicate-question
+  bug, and it does more than clarify: disclosing randomisation is ethically cleaner, and
+  it stops a disliked-condition participant reading their reveal as another error. But
+  it also tells every participant the colour was not theirs to choose, which is read
+  immediately before the ownership and perceived-agency items, and it may soften how
+  aggrieved a disliked-condition participant feels about the outcome. That is a change
+  to the liked-versus-disliked contrast, not just to the interface. Report it, and treat
+  it as a limitation if the manipulation comes out weaker than the literature.
 - The draw uses the platform CSPRNG with modulo-bias rejection, not `Math.random`.
   A test runs 12,000 draws and asserts uniformity within 15%.
 - Allocation is **atomic in production**. Reading the counts and writing the chosen cell
@@ -174,6 +195,54 @@ Two details worth knowing for the methods section:
 | Gen Z, Level 1 | 7 | 10 |
 | Gen Z, Level 2 | 8 | 11 |
 | Gen Z, Level 3 | 9 | 12 |
+
+---
+
+## Languages
+
+The study runs in English, Sinhala and Tamil. English is the default, and the picker is
+on the consent screen — deliberately the last screen where it can appear, because once
+consent is given the language is written to the session and fixed. A participant who
+could switch mid-study would be answering one wording of the scale having read another.
+
+The choice is stored on the response, restored on resume (so returning on a second
+device does not silently switch to English), and exported as a `language` column.
+
+**The Sinhala and Tamil currently in the repository were produced by an AI assistant and
+have not been verified by a native speaker.** They are good enough to build and test
+against and are not good enough to collect data with. To get them reviewed:
+
+```bash
+npm run strings        # writes exports/translations-for-review.csv
+```
+
+That is every string in all three languages side by side, with an empty column to
+correct each one in and a priority marking the rows where a plausible-looking
+translation still changes the study. Paste corrections back into
+`public/shared/strings/si.js`, `ta.js` and `src/strings-server.js`, then `npm run check`.
+
+Four things about this are methodological rather than technical, and belong in the
+write-up:
+
+- **The eight scale items are a translated instrument.** Purchase intention,
+  psychological ownership, perceived agency and colour preference. A translated
+  validated scale is not automatically equivalent to the original; if one language reads
+  stronger than another, language is confounded with condition and level. These need
+  forward and back translation, not proofreading.
+- **The consent body is an ethics document.** If the committee approved an English form,
+  the translated forms may need approving too.
+- **Colour names carry the manipulation.** Ten hues at one saturation and one lightness
+  differ only by name, and the reveal names one of them back to the participant. Sinhala
+  and Tamil have no everyday word for teal and normally borrow magenta, so those are
+  built as compounds. A check enforces that all ten stay distinct in every language,
+  because two collapsing onto one word would describe two treatments identically.
+- **Nothing balances language across the twelve cells.** Randomisation is
+  cell-count-aware over condition and level only, so language is free to correlate with
+  generation. Worth crosstabbing before treating it as noise.
+
+Coverage is enforced rather than hoped for: `npm run check` fails on a missing key, a
+stale key, a scale item still in English, a lost `{placeholder}`, or a colour-name
+collision.
 
 ---
 
@@ -193,7 +262,7 @@ detection would silently stop working.
 **`responses`** — the experimental data, carrying no email and no identifier.
 
 ```
-sessionId, birthYear, generation, gender, ex1, ex2,
+sessionId, language, birthYear, generation, gender, ex1, ex2,
 likedColourHex, dislikedColourHex,
 assignedCondition, assignedLevel, cellId,
 stage4CompletionSeconds, flaggedFast,
@@ -201,6 +270,9 @@ customisation: { ...values for the assigned level..., engagement flags, engageme
 pin1..pin3, po1..po3, pa1, cp1,
 startedAt, submittedAt, lastUpdatedAt, completed
 ```
+
+`language` is `en`, `si` or `ta`, written when the session is created and never changed
+after. It is empty on any response collected before the picker existed.
 
 Because the two collections share no key, deleting the email hashes at the close of data
 collection leaves the experimental data completely intact:

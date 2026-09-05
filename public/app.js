@@ -4,28 +4,33 @@
  * which are the Worker's job. Nothing in this file knows the participant's condition
  * or customisation level: the server hands over a finished reveal sentence and a
  * yes/no on whether customisation is available, and that is all the client is told.
- * Reading this file end to end tells a curious participant nothing about the design. */
+ * Reading this file end to end tells a curious participant nothing about the design.
+ *
+ * No participant-facing wording lives here either. Every string is a key into
+ * public/shared/strings/, so the flow reads the same in all three languages and a
+ * translator never has to open this file. */
 
 import {
   COLOUR_POOL,
   colourByHex,
+  colourKey,
   isEligibleBirthYear,
-  INELIGIBLE_BIRTH_YEAR_MESSAGE,
+  birthYearRangesText,
   GENDER_OPTIONS,
-  EX1_OPTIONS,
-  EX2_OPTIONS,
-  QUESTIONNAIRE_ITEMS,
+  EX1_VALUES,
+  EX2_VALUES,
+  QUESTIONNAIRE_ITEM_IDS,
   LIKERT_MIN,
   LIKERT_MAX,
-  LIKERT_MIN_LABEL,
-  LIKERT_MAX_LABEL,
-  STEP_LABELS,
-  LOADING_FLOOR_MS,
-  CONSENT_TEXT,
-  MESSAGES
+  STEP_NUMBERS,
+  TOTAL_STEPS,
+  LOADING_FLOOR_MS
 } from './shared/study-config.js';
+import { LANGUAGES, LANGUAGE_FIELD_LABEL, normaliseLanguage } from './shared/languages.js';
+import { t, setLanguage, getLanguage } from './shared/i18n.js';
 
 const SESSION_KEY = 'chameleon.sessionId';
+const LANGUAGE_KEY = 'chameleon.language';
 
 const app = document.getElementById('app');
 const stepEl = document.getElementById('stepIndicator');
@@ -47,6 +52,19 @@ function writeSession(id) {
 }
 function clearSession() {
   try { localStorage.removeItem(SESSION_KEY); } catch { /* nothing to do */ }
+}
+
+/* The language is remembered separately from the session and outlives it.
+ *
+ * It is chosen on the consent screen, before there is a session to attach it to, and a
+ * participant who reloads that screen must not be dropped back into English. Once the
+ * session exists the server's copy is authoritative -- see boot() -- because that is
+ * the one that survives a different device. */
+function readStoredLanguage() {
+  try { return localStorage.getItem(LANGUAGE_KEY); } catch { return null; }
+}
+function writeStoredLanguage(code) {
+  try { localStorage.setItem(LANGUAGE_KEY, code); } catch { /* choice not remembered */ }
 }
 
 /* ---------------- api ---------------- */
@@ -96,9 +114,11 @@ function h(tag, props, ...children) {
 
 function screen(stage, ...nodes) {
   app.replaceChildren(...nodes);
-  const label = STEP_LABELS[stage];
-  stepEl.textContent = label || '';
-  stepEl.hidden = !label;
+  const number = STEP_NUMBERS[stage];
+  stepEl.textContent = number
+    ? t('step.format', { current: number, total: TOTAL_STEPS })
+    : '';
+  stepEl.hidden = !number;
   window.scrollTo(0, 0);
 }
 
@@ -107,22 +127,20 @@ function screen(stage, ...nodes) {
 function radioGroup({ name, options, value, onChange }) {
   const group = h('div', { class: 'options', role: 'radiogroup' });
   for (const opt of options) {
-    const optValue = typeof opt === 'object' ? opt.value : opt;
-    const optLabel = typeof opt === 'object' ? opt.label : opt;
     const input = h('input', {
       type: 'radio',
       name,
-      value: String(optValue),
-      checked: String(value) === String(optValue)
+      value: String(opt.value),
+      checked: String(value) === String(opt.value)
     });
-    const row = h('label', { class: 'option' + (String(value) === String(optValue) ? ' selected' : '') },
+    const row = h('label', { class: 'option' + (String(value) === String(opt.value) ? ' selected' : '') },
       input,
-      h('span', { class: 'option-text', text: optLabel })
+      h('span', { class: 'option-text', text: opt.label })
     );
     input.addEventListener('change', () => {
       group.querySelectorAll('.option').forEach((n) => n.classList.remove('selected'));
       row.classList.add('selected');
-      onChange(optValue);
+      onChange(opt.value);
     });
     group.append(row);
   }
@@ -141,14 +159,23 @@ function hideError(node) {
   node.hidden = true;
 }
 
-/* ---------------- Stage 1: consent ---------------- */
+/* ---------------- Stage 1: consent ----------------
+ *
+ * The only screen with the language picker on it, and the last moment it can appear.
+ * Once the consent button is pressed the session exists and the language is written to
+ * it, and from then on a participant switching language mid-study would be answering
+ * one wording of the scale having read another. */
 
-function renderConsent() {
-  const agreed = { value: false };
+function renderConsent(state) {
+  const agreed = { value: Boolean(state?.agreed) };
   const err = fieldError();
 
-  const checkbox = h('input', { type: 'checkbox' });
-  const proceed = h('button', { class: 'cta', disabled: true, text: 'I agree and proceed' });
+  const checkbox = h('input', { type: 'checkbox', checked: agreed.value });
+  const proceed = h('button', {
+    class: 'cta',
+    disabled: !agreed.value,
+    text: t('consent.agree')
+  });
 
   checkbox.addEventListener('change', () => {
     agreed.value = checkbox.checked;
@@ -157,28 +184,41 @@ function renderConsent() {
   });
 
   proceed.addEventListener('click', async () => {
-    if (!agreed.value) return showError(err, 'Please confirm the statement above to continue.');
+    if (!agreed.value) return showError(err, t('consent.confirmRequired'));
     proceed.disabled = true;
-    proceed.textContent = 'Starting\u2026';
+    proceed.textContent = t('common.starting');
     try {
-      const { sessionId: id } = await api('/api/session/start');
+      /* The language goes with the request that creates the session, not a later
+         update, so there is no window in which a response document exists without one. */
+      const { sessionId: id } = await api('/api/session/start', { language: getLanguage() });
       sessionId = id;
       writeSession(id);
       renderOnboarding({});
     } catch {
       proceed.disabled = false;
-      proceed.textContent = 'I agree and proceed';
-      showError(err, MESSAGES.genericError);
+      proceed.textContent = t('consent.agree');
+      showError(err, t('message.genericError'));
     }
   });
 
   screen('consent',
     h('div', { class: 'card' },
-      h('h1', { text: 'Information and consent' }),
-      h('p', { class: 'consent-body', text: CONSENT_TEXT }),
+      /* The whole box, not its value. The redraw happens whenever the participant
+         changes language, which may be long after this line ran, and passing the
+         boolean would carry the state as it was at first paint -- losing a tick made in
+         between and quietly re-arming the "please confirm" error. */
+      languageField(agreed),
+      h('h1', { text: t('consent.title') }),
+      /* The button is named inside the sentence by interpolation rather than quoted, so
+         a translation cannot end up telling the participant to press something whose
+         label was rendered differently three lines below. */
+      h('p', {
+        class: 'consent-body',
+        text: t('consent.body', { agreeButton: t('consent.agree') })
+      }),
       h('label', { class: 'checkbox-row' },
         checkbox,
-        h('span', { text: 'I have read and understood the above, I am 18 or older, and I consent to participate.' })
+        h('span', { text: t('consent.checkbox') })
       ),
       proceed,
       err,
@@ -186,10 +226,43 @@ function renderConsent() {
          clicked, so there is no record to remove. */
       h('button', {
         class: 'cta secondary',
-        text: 'I do not wish to participate',
-        onclick: () => renderTerminal('Thank you', MESSAGES.declined)
+        text: t('consent.decline'),
+        onclick: () => renderTerminal(t('common.thankYou'), t('message.declined'))
       })
     )
+  );
+}
+
+/* A native <select> rather than a custom widget.
+ *
+ * It inherits the platform's own language picker behaviour on a phone, is reachable by
+ * keyboard and screen reader without any work, and cannot be left half-styled in a
+ * script the developer cannot read. The options are named in their own scripts, since
+ * a participant who needs this control cannot read the English word for their own
+ * language -- see public/shared/languages.js. */
+function languageField(agreed) {
+  const select = h('select', { class: 'language-select', id: 'language' });
+
+  for (const language of LANGUAGES) {
+    select.append(h('option', {
+      value: language.code,
+      selected: language.code === getLanguage(),
+      text: language.code === 'en' ? language.endonym : `${language.endonym} (${language.label})`
+    }));
+  }
+
+  select.addEventListener('change', () => {
+    const code = setLanguage(select.value);
+    writeStoredLanguage(code);
+    /* Redrawn rather than patched in place. Every string on the screen changes, and the
+       consent checkbox is carried across so a participant who ticks the box and then
+       switches language does not silently lose it. */
+    renderConsent({ agreed: agreed.value });
+  });
+
+  return h('div', { class: 'language-field' },
+    h('label', { class: 'language-label', for: 'language', text: LANGUAGE_FIELD_LABEL }),
+    select
   );
 }
 
@@ -204,11 +277,14 @@ function renderOnboarding(prefill) {
     ex2: prefill.ex2 ?? null
   };
 
+  const ineligibleMessage = () =>
+    t('onboarding.ineligible', { ranges: birthYearRangesText(t('common.rangeJoin')) });
+
   const yearInput = h('input', {
     type: 'number',
     class: 'text-input',
     inputmode: 'numeric',
-    placeholder: 'e.g. 1975',
+    placeholder: t('onboarding.birthYearPlaceholder'),
     value: data.birthYear,
     min: '1900',
     max: '2020'
@@ -224,7 +300,7 @@ function renderOnboarding(prefill) {
   const emailInput = h('input', {
     type: 'email',
     class: 'text-input',
-    placeholder: 'you@example.com',
+    placeholder: t('onboarding.emailPlaceholder'),
     autocomplete: 'email',
     value: data.email
   });
@@ -240,40 +316,40 @@ function renderOnboarding(prefill) {
   const formErr = fieldError();
   formErr.classList.add('form-error');
 
-  const submit = h('button', { class: 'cta', text: 'Continue' });
+  const submit = h('button', { class: 'cta', text: t('common.continue') });
 
   submit.addEventListener('click', async () => {
     hideError(formErr);
     let ok = true;
 
     if (!data.birthYear) {
-      showError(yearErr, 'Please enter your birth year.');
+      showError(yearErr, t('onboarding.birthYearRequired'));
       yearInput.setAttribute('aria-invalid', 'true');
       ok = false;
     } else if (!/^\d{4}$/.test(data.birthYear)) {
-      showError(yearErr, 'Please enter a four-digit year.');
+      showError(yearErr, t('onboarding.birthYearFourDigits'));
       yearInput.setAttribute('aria-invalid', 'true');
       ok = false;
     } else if (!isEligibleBirthYear(data.birthYear)) {
-      showError(yearErr, INELIGIBLE_BIRTH_YEAR_MESSAGE);
+      showError(yearErr, ineligibleMessage());
       yearInput.setAttribute('aria-invalid', 'true');
       ok = false;
     }
 
-    if (!data.gender) { showError(genderErr, 'Please select an option.'); ok = false; }
+    if (!data.gender) { showError(genderErr, t('common.selectOption')); ok = false; }
 
     if (!data.email) {
-      showError(emailErr, 'Please enter your email address.');
+      showError(emailErr, t('onboarding.emailRequired'));
       emailInput.setAttribute('aria-invalid', 'true');
       ok = false;
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) {
-      showError(emailErr, 'Please enter a valid email address.');
+      showError(emailErr, t('onboarding.emailInvalid'));
       emailInput.setAttribute('aria-invalid', 'true');
       ok = false;
     }
 
-    if (!data.ex1) { showError(ex1Err, 'Please select an option.'); ok = false; }
-    if (!data.ex2) { showError(ex2Err, 'Please select an option.'); ok = false; }
+    if (!data.ex1) { showError(ex1Err, t('common.selectOption')); ok = false; }
+    if (!data.ex2) { showError(ex2Err, t('common.selectOption')); ok = false; }
 
     if (!ok) {
       app.querySelector('.error:not([hidden])')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -281,7 +357,7 @@ function renderOnboarding(prefill) {
     }
 
     submit.disabled = true;
-    submit.textContent = 'Saving\u2026';
+    submit.textContent = t('common.saving');
     try {
       const res = await api('/api/onboarding', {
         birthYear: Number(data.birthYear),
@@ -295,37 +371,38 @@ function renderOnboarding(prefill) {
          participant is turned away before investing time in the task. */
       if (res.duplicate) {
         clearSession();
-        return renderTerminal('Thank you', MESSAGES.duplicate);
+        return renderTerminal(t('common.thankYou'), t('message.duplicate'));
       }
       if (res.ineligible) {
         submit.disabled = false;
-        submit.textContent = 'Continue';
-        return showError(yearErr, INELIGIBLE_BIRTH_YEAR_MESSAGE);
+        submit.textContent = t('common.continue');
+        return showError(yearErr, ineligibleMessage());
       }
       renderCalibration({});
     } catch {
       submit.disabled = false;
-      submit.textContent = 'Continue';
-      showError(formErr, MESSAGES.genericError);
+      submit.textContent = t('common.continue');
+      showError(formErr, t('message.genericError'));
     }
   });
 
   screen('onboarding',
     h('div', { class: 'card' },
-      h('h1', { text: 'A few questions about you' }),
-      h('p', { class: 'lede', text: 'All fields are required.' }),
+      h('h1', { text: t('onboarding.title') }),
+      h('p', { class: 'lede', text: t('onboarding.lede') }),
 
       h('div', { class: 'field' },
-        h('label', { class: 'field-label', text: 'What is your birth year?' }),
+        h('label', { class: 'field-label', text: t('onboarding.birthYear') }),
         yearInput,
         yearErr
       ),
 
       h('div', { class: 'field' },
-        h('label', { class: 'field-label', text: 'What is your gender?' }),
+        h('label', { class: 'field-label', text: t('onboarding.gender') }),
         radioGroup({
           name: 'gender',
-          options: GENDER_OPTIONS,
+          /* The value stored is the English token; only the label is translated. */
+          options: GENDER_OPTIONS.map((value) => ({ value, label: t(`gender.${value}`) })),
           value: data.gender,
           onChange: (v) => { data.gender = v; hideError(genderErr); }
         }),
@@ -333,17 +410,17 @@ function renderOnboarding(prefill) {
       ),
 
       h('div', { class: 'field' },
-        h('label', { class: 'field-label', text: 'What is your email address?' }),
-        h('p', { class: 'field-hint', text: 'Used only to prevent duplicate responses. It is stored separately from your answers and deleted once data collection closes.' }),
+        h('label', { class: 'field-label', text: t('onboarding.email') }),
+        h('p', { class: 'field-hint', text: t('onboarding.emailHint') }),
         emailInput,
         emailErr
       ),
 
       h('div', { class: 'field' },
-        h('label', { class: 'field-label', text: 'For how long have you been shopping online?' }),
+        h('label', { class: 'field-label', text: t('onboarding.ex1') }),
         radioGroup({
           name: 'ex1',
-          options: EX1_OPTIONS,
+          options: EX1_VALUES.map((value) => ({ value, label: t(`ex1.${value}`) })),
           value: data.ex1,
           onChange: (v) => { data.ex1 = v; hideError(ex1Err); }
         }),
@@ -351,10 +428,10 @@ function renderOnboarding(prefill) {
       ),
 
       h('div', { class: 'field' },
-        h('label', { class: 'field-label', text: 'How often do you make online purchases?' }),
+        h('label', { class: 'field-label', text: t('onboarding.ex2') }),
         radioGroup({
           name: 'ex2',
-          options: EX2_OPTIONS,
+          options: EX2_VALUES.map((value) => ({ value, label: t(`ex2.${value}`) })),
           value: data.ex2,
           onChange: (v) => { data.ex2 = v; hideError(ex2Err); }
         }),
@@ -367,10 +444,40 @@ function renderOnboarding(prefill) {
   );
 }
 
-/* ---------------- Stage 3: calibration ---------------- */
+/* ---------------- Stage 3: calibration ----------------
+ *
+ * Five screens, not two: an announcement, the first palette, a second announcement, the
+ * second palette, then both choices shown together.
+ *
+ * The three extra screens are not decoration. The two palettes are necessarily
+ * near-identical -- the same ten swatches in the same grid, because holding the layout
+ * constant is what keeps the second choice comparable to the first -- and a participant
+ * who read one prompt and not the other took the second screen for the first screen
+ * redisplayed by mistake. At least one told us so. The failure is silent in the data:
+ * they answer the same question twice, both hexes are populated, and nothing marks the
+ * response as suspect.
+ *
+ * So each palette is now preceded by a screen that does nothing except say which of the
+ * two choices is coming, and followed at the end by one that shows what was recorded.
+ * The announcements wait for a click rather than timing out, because a screen that
+ * disappears on its own can be missed by exactly the participant who was not reading
+ * carefully -- which is the participant this exists for. */
 
 function renderCalibration(prefill) {
   let liked = prefill.likedColourHex ?? null;
+  let disliked = null;
+
+  /* Deliberately plain: a heading, at most one line under it, and a button. Anything
+     else on the screen would give the eye somewhere else to go. */
+  function announce({ title, body, onContinue }) {
+    screen('calibration',
+      h('div', { class: 'card centred announce' },
+        h('h1', { text: title }),
+        body ? h('p', { class: 'lede', text: body }) : null,
+        h('button', { class: 'cta', text: t('common.continue'), onclick: onContinue })
+      )
+    );
+  }
 
   /* Tapping a swatch locks it and stamps the badge across it, so the participant can see
      at a glance which colour they have committed to rather than inferring it from a thin
@@ -382,19 +489,24 @@ function renderCalibration(prefill) {
      so without that, a participant who glanced past the prompt could give their most
      liked colour twice and never notice. That mistake is invisible in the data: the two
      hexes are simply wrong, not missing. */
-  function pool({ title, subtitle, prompt, spent, spentLabel, lockLabel, initial, onConfirm }) {
+  function pool({ subtitle, prompt, spent, spentRole, lockLabel, initial, onConfirm }) {
     let chosen = initial || null;
     const buttons = new Map();
     const grid = h('div', { class: 'swatch-pool' });
 
     for (const colour of COLOUR_POOL) {
       const isSpent = spent?.hex === colour.hex;
+      const name = t(colourKey(colour));
       const btn = h('button', {
         type: 'button',
         class: 'pool-swatch',
         style: `background:${colour.hex}`,
-        title: isSpent ? `${colour.name} (locked as your ${spentLabel.toLowerCase()})` : colour.name,
-        'aria-label': isSpent ? `${colour.name}, locked as your ${spentLabel.toLowerCase()}` : colour.name,
+        title: isSpent
+          ? t('calibration.swatchLockedTitle', { colour: name, role: spentRole })
+          : name,
+        'aria-label': isSpent
+          ? t('calibration.swatchLockedAria', { colour: name, role: spentRole })
+          : name,
         disabled: isSpent
       });
       if (!isSpent) {
@@ -405,7 +517,7 @@ function renderCalibration(prefill) {
       grid.append(btn);
     }
 
-    const cta = h('button', { class: 'cta', text: 'Continue', disabled: true });
+    const cta = h('button', { class: 'cta', text: t('common.continue'), disabled: true });
     const err = fieldError();
     err.classList.add('form-error');
 
@@ -413,14 +525,21 @@ function renderCalibration(prefill) {
       for (const [hex, btn] of buttons) {
         const isChosen = chosen?.hex === hex;
         /* A spent colour is disabled, so it can never also be the chosen one. */
-        const role = isChosen ? lockLabel : spent?.hex === hex ? spentLabel : null;
+        const role = isChosen
+          ? lockLabel
+          : spent?.hex === hex
+            ? t('calibration.mostLiked')
+            : null;
         btn.classList.toggle('locked', Boolean(role));
         if (!btn.disabled) btn.setAttribute('aria-pressed', String(isChosen));
-        /* The newline is deliberate, and rendered with white-space: pre-line. "Locked"
-           states what happened; the line under it states which of the two choices this
-           is, and stacking them keeps both legible inside a swatch. */
+        /* The newline is deliberate, and rendered with white-space: pre-line. The first
+           line states what happened; the line under it states which of the two choices
+           this is, and stacking them keeps both legible inside a swatch. */
         btn.replaceChildren(
-          ...(role ? [h('span', { class: 'swatch-lock' }, h('span', { text: `Locked\n${role}` }))] : [])
+          ...(role
+            ? [h('span', { class: 'swatch-lock' },
+                h('span', { text: `${t('calibration.locked')}\n${role}` }))]
+            : [])
         );
       }
       cta.disabled = !chosen;
@@ -432,54 +551,112 @@ function renderCalibration(prefill) {
     paint();
 
     return h('div', { class: 'card' },
-      h('h1', { text: title }),
+      h('h1', { text: t('calibration.title') }),
       h('h2', { text: subtitle }),
       h('p', { class: 'lede', text: prompt }),
       grid,
-      h('p', { class: 'hint', text: 'Your choice locks when you tap it. You can change it until you continue.' }),
+      h('p', { class: 'hint', text: t('calibration.hint') }),
       cta,
       err
     );
   }
 
+  function introLiked() {
+    announce({ title: t('calibration.introLikedTitle'), onContinue: askLiked });
+  }
+
   function askLiked() {
     screen('calibration', pool({
-      title: 'Colour preferences',
-      subtitle: 'Most Liked Colour',
-      prompt: 'From the colours below, select the one you would most like to see on a casual T-shirt.',
+      subtitle: t('calibration.likedSubtitle'),
+      prompt: t('calibration.likedPrompt'),
       spent: null,
-      spentLabel: null,
-      lockLabel: 'Most Liked',
+      spentRole: null,
+      lockLabel: t('calibration.mostLiked'),
       initial: colourByHex(liked),
-      onConfirm: (colour) => { liked = colour.hex; askDisliked(); }
+      onConfirm: (colour) => { liked = colour.hex; introDisliked(); }
     }));
+  }
+
+  /* Confirms the first choice before naming the second, so the participant crosses a
+     screen that says the two are different things before meeting the identical grid. */
+  function introDisliked() {
+    announce({
+      title: t('calibration.introDislikedTitle'),
+      body: t('calibration.introDislikedBody'),
+      onContinue: askDisliked
+    });
   }
 
   /* The liked swatch stays in the grid, locked, rather than being removed: the grid does
      not reflow and the second choice is made against the same spatial layout as the first. */
   function askDisliked() {
     screen('calibration', pool({
-      title: 'Colour preferences',
-      subtitle: 'Least Liked Colour',
-      prompt: 'Now select the colour you would least like to see on a casual T-shirt.',
+      subtitle: t('calibration.dislikedSubtitle'),
+      prompt: t('calibration.dislikedPrompt'),
       spent: colourByHex(liked),
-      spentLabel: 'Most Liked',
-      lockLabel: 'Least Liked',
+      spentRole: t('calibration.mostLikedInline'),
+      lockLabel: t('calibration.leastLiked'),
       initial: null,
+      /* Saved here rather than after the summary. The summary is a confirmation of what
+         was recorded, so the recording has to have happened by the time it is shown; and
+         a participant who closes the tab while reading it must not lose two choices they
+         already made. The consequence is that resuming from the summary screen lands on
+         the reveal instead, which is the right trade. */
       onConfirm: async (colour, cta, err) => {
         cta.disabled = true;
         try {
           await api('/api/calibration', { likedColourHex: liked, dislikedColourHex: colour.hex });
-          renderReveal();
+          disliked = colour.hex;
+          showBothColours();
         } catch {
           cta.disabled = false;
-          showError(err, MESSAGES.genericError);
+          showError(err, t('message.genericError'));
         }
       }
     }));
   }
 
-  askLiked();
+  /* Both choices, side by side and named.
+   *
+   * This is what actually answers the participant who thought they had been asked the
+   * same question twice: two different colours, labelled with the two different roles,
+   * on one screen. The names are spelled out as well as shown, which also means the
+   * screen still works for a participant who cannot distinguish the two swatches.
+   *
+   * The note underneath says one of the two will be chosen at random. That is a
+   * disclosure about the design rather than interface copy: it is accurate, it stops a
+   * participant in the disliked condition reading their reveal as another error, and it
+   * tells everyone the colour was not theirs to choose. It says nothing about which of
+   * the two conditions this participant is in, and the blinding is unaffected. */
+  function showBothColours() {
+    const likedColour = colourByHex(liked);
+    const dislikedColour = colourByHex(disliked);
+
+    screen('calibration',
+      h('div', { class: 'card centred' },
+        h('h1', { text: t('calibration.summaryTitle') }),
+        h('div', { class: 'colour-summary' },
+          summaryTile(likedColour, t('calibration.mostLiked')),
+          summaryTile(dislikedColour, t('calibration.leastLiked'))
+        ),
+        h('p', { class: 'hint summary-note', text: t('calibration.summaryNote') }),
+        h('button', { class: 'cta', text: t('common.continue'), onclick: () => renderReveal() })
+      )
+    );
+  }
+
+  function summaryTile(colour, role) {
+    const name = t(colourKey(colour));
+    return h('div', { class: 'summary-colour' },
+      /* The name below carries the same information, so the swatch is decorative to a
+         screen reader rather than something it should try to describe. */
+      h('div', { class: 'summary-swatch', style: `background:${colour.hex}`, 'aria-hidden': 'true' }),
+      h('span', { class: 'summary-role', text: role }),
+      h('span', { class: 'summary-name', text: name })
+    );
+  }
+
+  introLiked();
 }
 
 /* ---------------- Stage 3.5: loading and reveal ----------------
@@ -501,8 +678,8 @@ function renderReveal(existing) {
   screen('reveal',
     h('div', { class: 'card' },
       h('div', { class: 'loading' },
-        h('div', { class: 'spinner', role: 'status', 'aria-label': 'Preparing' }),
-        h('p', { text: 'Preparing your T-shirt\u2026' })
+        h('div', { class: 'spinner', role: 'status', 'aria-label': t('reveal.preparingAria') }),
+        h('p', { text: t('reveal.preparing') })
       )
     )
   );
@@ -514,7 +691,7 @@ function renderReveal(existing) {
       const assignment = existing || await api('/api/assign');
       if (assignment.studyFull) {
         await floor;
-        return renderTerminal('Thank you', MESSAGES.studyFull);
+        return renderTerminal(t('common.thankYou'), t('message.studyFull'));
       }
 
       const host = await loadStage4Module();
@@ -524,11 +701,15 @@ function renderReveal(existing) {
       showReveal(assignment);
     } catch (err) {
       await floor;
-      const retry = h('button', { class: 'cta', text: 'Try again', onclick: () => renderReveal(existing) });
+      const retry = h('button', {
+        class: 'cta',
+        text: t('common.tryAgain'),
+        onclick: () => renderReveal(existing)
+      });
       screen('reveal',
         h('div', { class: 'card centred' },
-          h('h1', { text: 'We could not prepare your T-shirt' }),
-          h('p', { class: 'lede', text: MESSAGES.genericError }),
+          h('h1', { text: t('reveal.failedTitle') }),
+          h('p', { class: 'lede', text: t('message.genericError') }),
           retry
         )
       );
@@ -541,8 +722,14 @@ function showReveal(assignment) {
   screen('reveal',
     h('div', { class: 'card centred' },
       h('div', { class: 'reveal-swatch', style: `background:${assignment.colourHex}` }),
+      /* Already in the participant's language: the server composed it, because which of
+         the two endings it carries is the manipulation and must not be inferable here. */
       h('p', { class: 'reveal-sentence', text: assignment.revealSentence }),
-      h('button', { class: 'cta', text: 'Continue', onclick: () => renderTreatment(assignment) })
+      h('button', {
+        class: 'cta',
+        text: t('common.continue'),
+        onclick: () => renderTreatment(assignment)
+      })
     )
   );
 }
@@ -572,7 +759,7 @@ async function renderTreatment(assignment) {
         preparedGarment = null;
         renderQuestionnaire();
       } catch {
-        done(MESSAGES.genericError);
+        done(t('message.genericError'));
       }
     }
   });
@@ -584,68 +771,69 @@ function renderQuestionnaire() {
   const answers = {};
   const errors = {};
 
-  const items = QUESTIONNAIRE_ITEMS.map((item) => {
-    const scale = h('div', { class: 'likert-scale', role: 'radiogroup', 'aria-label': item.text });
+  const items = QUESTIONNAIRE_ITEM_IDS.map((id) => {
+    const statement = t(`item.${id}`);
+    const scale = h('div', { class: 'likert-scale', role: 'radiogroup', 'aria-label': statement });
     const points = [];
 
     for (let v = LIKERT_MIN; v <= LIKERT_MAX; v++) {
-      const input = h('input', { type: 'radio', name: item.id, value: String(v) });
+      const input = h('input', { type: 'radio', name: id, value: String(v) });
       const point = h('label', { class: 'likert-point' }, input, h('span', { text: String(v) }));
       input.addEventListener('change', () => {
         points.forEach((p) => p.classList.remove('selected'));
         point.classList.add('selected');
-        answers[item.id] = v;
-        hideError(errors[item.id]);
+        answers[id] = v;
+        hideError(errors[id]);
       });
       points.push(point);
       scale.append(point);
     }
 
-    errors[item.id] = fieldError();
+    errors[id] = fieldError();
 
     return h('div', { class: 'likert-item' },
-      h('p', { class: 'likert-statement', text: item.text }),
+      h('p', { class: 'likert-statement', text: statement }),
       scale,
       h('div', { class: 'likert-ends' },
-        h('span', { text: `1 \u2014 ${LIKERT_MIN_LABEL}` }),
-        h('span', { text: `7 \u2014 ${LIKERT_MAX_LABEL}` })
+        h('span', { text: `${LIKERT_MIN} \u2014 ${t('questionnaire.likertMin')}` }),
+        h('span', { text: `${LIKERT_MAX} \u2014 ${t('questionnaire.likertMax')}` })
       ),
-      errors[item.id]
+      errors[id]
     );
   });
 
   const formErr = fieldError();
   formErr.classList.add('form-error');
-  const submit = h('button', { class: 'cta', text: 'Submit' });
+  const submit = h('button', { class: 'cta', text: t('common.submit') });
 
   submit.addEventListener('click', async () => {
     hideError(formErr);
-    const missing = QUESTIONNAIRE_ITEMS.filter((item) => !answers[item.id]);
-    for (const item of missing) showError(errors[item.id], 'Please rate this statement.');
+    const missing = QUESTIONNAIRE_ITEM_IDS.filter((id) => !answers[id]);
+    for (const id of missing) showError(errors[id], t('questionnaire.rateRequired'));
 
     if (missing.length) {
-      showError(formErr, `Please answer all ${QUESTIONNAIRE_ITEMS.length} statements before submitting.`);
+      showError(formErr, t('questionnaire.allRequired', { count: QUESTIONNAIRE_ITEM_IDS.length }));
       app.querySelector('.error:not([hidden])')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
 
     submit.disabled = true;
-    submit.textContent = 'Submitting\u2026';
+    submit.textContent = t('common.submitting');
     try {
       await api('/api/submit', { answers });
       clearSession();
       renderDone();
     } catch {
       submit.disabled = false;
-      submit.textContent = 'Submit';
-      showError(formErr, MESSAGES.genericError);
+      submit.textContent = t('common.submit');
+      showError(formErr, t('message.genericError'));
     }
   });
 
   screen('questionnaire',
     h('div', { class: 'card' },
-      h('h1', { text: 'A few final questions' }),
-      h('p', { class: 'lede', text: 'Rate each statement from 1 (strongly disagree) to 7 (strongly agree). All are required.' }),
+      h('h1', { text: t('questionnaire.title') }),
+      h('p', { class: 'lede', text: t('questionnaire.lede') }),
       items,
       submit,
       formErr
@@ -656,7 +844,7 @@ function renderQuestionnaire() {
 /* ---------------- terminal screens ---------------- */
 
 function renderDone() {
-  renderTerminal(MESSAGES.thanks, 'Your response has been recorded. You may now close this window.');
+  renderTerminal(t('message.thanks'), t('terminal.recorded'));
 
   /* Nothing should navigate back into a submitted study. Re-pushing the state on every
      popstate turns the back button into a no-op rather than letting a participant
@@ -664,7 +852,7 @@ function renderDone() {
   history.pushState({ done: true }, '');
   window.addEventListener('popstate', () => {
     history.pushState({ done: true }, '');
-    renderTerminal(MESSAGES.thanks, 'Your response has been recorded. You may now close this window.');
+    renderTerminal(t('message.thanks'), t('terminal.recorded'));
   });
 }
 
@@ -691,6 +879,12 @@ function renderTerminal(title, message) {
 async function boot() {
   sessionId = readSession();
 
+  /* Applied before anything is drawn, so no screen flashes in English first. Only the
+     locally remembered choice is available this early; a session's own language
+     arrives with the resume below and wins, because that is the record of what the
+     participant actually consented in. */
+  setLanguage(normaliseLanguage(readStoredLanguage()));
+
   if (!sessionId) return renderConsent();
 
   let state;
@@ -702,10 +896,12 @@ async function boot() {
       sessionId = null;
       return renderConsent();
     }
-    return renderTerminal(
-      'We could not reach the study',
-      'Please check your connection and reload the page.'
-    );
+    return renderTerminal(t('terminal.unreachableTitle'), t('terminal.unreachableBody'));
+  }
+
+  if (state.language) {
+    setLanguage(state.language);
+    writeStoredLanguage(state.language);
   }
 
   switch (state.stage) {
@@ -723,7 +919,7 @@ async function boot() {
       return renderQuestionnaire();
     case 'done':
       clearSession();
-      return renderTerminal(MESSAGES.thanks, 'Your response has already been recorded. Thank you.');
+      return renderTerminal(t('message.thanks'), t('terminal.alreadyRecorded'));
     default:
       clearSession();
       sessionId = null;

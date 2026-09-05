@@ -71,10 +71,19 @@ export class MongoConnection extends DurableObject {
   }
 
   /* Durable Object RPC surface. Each method is a pass-through, so the Worker can call
-   * `stub.assign(id)` and reach exactly the same code the tests exercise directly. */
+   * `stub.assign(id)` and reach exactly the same code the tests exercise directly.
+   *
+   * Every argument the service takes must be named here as well. A pass-through that
+   * forgets one is not a type error and not a runtime error: the argument simply
+   * arrives as undefined, the service applies its default and the request succeeds
+   * looking entirely normal. This is invisible to the dev server, which holds a
+   * StudyService directly and never crosses this boundary, so it only shows up in
+   * production -- which is exactly how the session language was silently defaulting to
+   * English for every participant. tools/self-check.mjs now compares the arity of each
+   * method here against the service's. */
 
   async health() { return (await this.service()).health(); }
-  async startSession() { return (await this.service()).startSession(); }
+  async startSession(options) { return (await this.service()).startSession(options); }
   async resume(sessionId) { return (await this.service()).resume(sessionId); }
 
   async saveOnboarding(sessionId, answers, emailHash) {

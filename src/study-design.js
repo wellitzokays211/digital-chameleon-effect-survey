@@ -7,7 +7,12 @@
  *
  * The client-safe half is public/shared/study-config.js. Keeping the two apart is
  * what makes the blinding requirement structural rather than a matter of remembering
- * not to log the wrong thing. */
+ * not to log the wrong thing. The wording that goes with what is decided here is in
+ * src/strings-server.js, which is server-only for the same reason. */
+
+import { colourKey } from '../public/shared/study-config.js';
+import { interpolate, translate } from '../public/shared/i18n.js';
+import { revealStrings } from './strings-server.js';
 
 export const GENERATIONS = ['GenX', 'GenZ'];
 export const CONDITIONS = ['Liked', 'Disliked'];
@@ -126,27 +131,31 @@ export const ENGAGEMENT_FLAGS_BY_LEVEL = {
  * Identical for both conditions bar the final clause, matched in length and tone, so
  * that neither version tells a participant how to feel about the colour they were
  * given moments before they rate it. Generated on the server and sent to the client as
- * a finished sentence: the client is never told which condition produced it. */
-export function revealSentence(colourName, condition) {
-  const clause = condition === 'Liked' ? 'like the most' : 'like the least';
-  const stem = colourName ? `This T-shirt is in ${colourName}.` : 'This T-shirt is in this colour.';
+ * a finished sentence: the client is never told which condition produced it.
+ *
+ * The wording itself is in src/strings-server.js, in all three languages, because both
+ * clauses have to exist somewhere and that somewhere must not be a file the browser
+ * can fetch. A participant able to read both endings would know their own condition. */
+export function revealSentence(colourId, condition, language) {
+  const s = revealStrings(language);
+  const clause = condition === 'Liked' ? s.likedClause : s.dislikedClause;
+  const stem = colourId
+    ? interpolate(s.stem, { colour: translate(language, colourKey(colourId)) })
+    : s.stemNoColour;
   /* The newline is deliberate. The client renders this with white-space: pre-line so the
      attribution sits on its own line, which keeps the colour name from competing with it
      for attention at the moment the participant first sees the garment. */
-  return `${stem}\n(The colour you told us you ${clause})`;
+  return `${stem}\n${clause}`;
 }
-
-/* Identical wording for Level 2 and Level 3, so a Level 2 participant sees nothing
- * implying a Level 3 exists. */
-export const CUSTOMISATION_PROMPT = 'You can now customise this T-shirt.';
-export const CUSTOMISATION_CTA = 'Start customising';
-export const CUSTOMISATION_CHANGES_HEADING = 'Changes you can make:';
 
 /* What the participant is told they may change, before they commit to starting.
  *
- * Built here rather than in the browser: the list differs by level, so holding the
- * mapping client-side would hand every participant the shape of the whole design. A
- * Level 2 participant receives three items and no reason to think a fourth exists.
+ * Keys, not sentences: the wording for each lives in src/strings-server.js so that it
+ * exists once per language, and this file stays a statement of which level gets which
+ * item. Built here rather than in the browser because the list differs by level, and
+ * holding the mapping client-side would hand every participant the shape of the whole
+ * design. A Level 2 participant receives three items and no reason to think a fourth
+ * exists.
  *
  * The Level 3 skin-tone item asks participants to match their own tone. This is the
  * researcher's decision, taken knowingly, and it changes what the skin-tone measure
@@ -154,16 +163,11 @@ export const CUSTOMISATION_CHANGES_HEADING = 'Changes you can make:';
  * revealed, so it reads as matching under instruction and belongs in the limitations.
  * The control itself still gives no reference, no target and no closeness feedback, so
  * how near a participant lands remains their own judgement. Anyone changing this
- * wording is changing the construct, not the copy. */
-export const CUSTOMISATION_CHANGES_BY_LEVEL = {
+ * wording is changing the construct, not the copy -- in any language. */
+export const CUSTOMISATION_CHANGE_KEYS_BY_LEVEL = {
   1: [],
-  2: ['Add text', 'Change the sleeve length', 'Change the neck type'],
-  3: [
-    'Add text',
-    'Change the sleeve length',
-    'Change the neck type',
-    "Change the model's skin tone to match yours"
-  ]
+  2: ['text', 'sleeve', 'neck'],
+  3: ['text', 'sleeve', 'neck', 'skinTone']
 };
 
 /* ---------------- progress ---------------- */

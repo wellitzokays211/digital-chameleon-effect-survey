@@ -7,7 +7,12 @@
 <title>The T-shirt Study</title>
 
 <!-- Inter is loaded because the renderer measures and draws the shirt print in
-     '800 28px Inter'; the fallback face would change the glyph metrics. -->
+     '800 28px Inter'; the fallback face would change the glyph metrics.
+
+     Sinhala and Tamil need faces Inter does not contain, but they are not requested
+     here: public/shared/i18n.js appends the one it needs when a participant chooses
+     that language, so an English visit carries no weight for scripts it never shows.
+     The preconnects below are what make that later request cheap. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">

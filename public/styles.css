@@ -25,14 +25,36 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 
+/* Script faces named after Inter, not instead of it.
+ *
+ * The study runs in English, Sinhala and Tamil, and Inter has glyphs for none of the
+ * last two. The browser falls back per character, so an English page still renders
+ * entirely in Inter while a Sinhala one reaches past it to whichever of these the
+ * device has: Noto on Android, Nirmala UI on Windows, the Sangam faces on Apple
+ * platforms. Between them that covers every handset this study is likely to meet.
+ *
+ * The two Noto faces are not loaded by this stylesheet. public/shared/i18n.js appends
+ * them only once a participant picks the language that needs one, so an English visit
+ * fetches nothing extra and a Sinhala one is legible in the system face from the first
+ * paint. They are named here so that they win once they arrive. */
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Inter', 'Noto Sans Sinhala', 'Noto Sans Tamil', 'Nirmala UI',
+    'Iskoola Pota', 'Sinhala Sangam MN', 'Tamil Sangam MN', Latha, system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   font-size: 15px;
   line-height: 1.55;
   min-height: 100vh;
+}
+
+/* Both scripts carry tall vowel marks above the line and descenders below it, and at
+ * the Latin-tuned line height they collide with the row above. Applied by language
+ * rather than globally so the English build is left exactly as it was. */
+html:lang(si) body,
+html:lang(ta) body {
+  line-height: 1.75;
 }
 
 .noscript {
@@ -99,6 +121,49 @@ p:last-child { margin-bottom: 0; }
 .consent-body { font-size: 14.5px; line-height: 1.7; }
 
 .centred { text-align: center; }
+
+/* ---------------- language picker ----------------
+ *
+ * Above the heading and separated by a rule, rather than tucked in beside it. The one
+ * participant who needs this control cannot read the page telling them it is there, so
+ * it has to be the first thing on the screen and it has to look like a control rather
+ * than part of the prose.
+ *
+ * Right-aligned and small: it is chrome, not the first question of the study, and a
+ * full-width field at the top of a consent form reads as something to fill in. */
+.language-field {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.language-label {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+/* A native select, styled only as far as the border and the type.
+ *
+ * The chevron and the open list are left to the platform, which is what makes this
+ * usable on a phone and reachable by screen reader without a line of JavaScript. Its
+ * font is inherited so the two non-Latin option names render in a face that has their
+ * glyphs rather than in whatever the form-control default happens to be. */
+.language-select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.language-select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* ---------------- form fields ---------------- */
 
@@ -265,6 +330,86 @@ input[type="number"].text-input { max-width: 180px; }
   text-align: center;
   text-transform: uppercase;
   white-space: pre-line;
+}
+
+/* ---------------- calibration announcements and summary ----------------
+ *
+ * The three screens that separate the two palettes. Their whole job is to be
+ * unmistakably not a palette, so they are mostly empty: the participant who took the
+ * second grid for the first one redisplayed needs a screen with nowhere else to look. */
+
+.announce {
+  padding-top: 64px;
+  padding-bottom: 64px;
+}
+/* Larger than a normal heading because it is the only thing on the screen, and the
+   button below it is the only thing to do. The spacing before the button is left to
+   .cta's own margin, so the one-line and two-line announcements agree on it. */
+.announce h1 {
+  font-size: 24px;
+  max-width: 24ch;
+  margin: 0 auto;
+}
+/* Second line of a single thought -- "locked", then what is next -- so it sits close. */
+.announce .lede { max-width: 30ch; margin: 10px auto 0; }
+
+@media (max-width: 560px) {
+  .announce { padding-top: 40px; padding-bottom: 40px; }
+  .announce h1 { font-size: 21px; }
+}
+
+/* Two tiles, side by side and staying side by side.
+ *
+ * The comparison is the point of the screen, so they do not stack on a narrow phone:
+ * two colours one above the other invite being read as a sequence rather than as a
+ * pair, which is the misreading this screen exists to correct. */
+.colour-summary {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  margin: 26px 0 4px;
+}
+@media (max-width: 420px) {
+  .colour-summary { gap: 16px; }
+}
+
+.summary-colour {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 150px;
+}
+
+.summary-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 120px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+}
+
+/* The role is the emphasised line, not the colour name. Which of the two choices a
+   swatch represents is the thing the participant is being reassured about. */
+.summary-role {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.summary-name { font-size: 13px; color: var(--ink-soft); }
+
+/* No width clamp: the sentence is one parenthetical aside and reads as an aside only
+   while it stays on one line. The card's own padding is the bound. On the narrowest
+   phones it will still wrap, and balance splits it evenly there rather than stranding
+   the last two words on a line of their own. */
+.summary-note {
+  margin: 18px auto 0;
+  text-wrap: balance;
 }
 
 /* ---------------- loading and reveal ---------------- */

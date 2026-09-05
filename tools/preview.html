@@ -128,13 +128,26 @@
       </select>
       <span class="level-note">Decides which model photograph is used, so it changes what you see rendered.</span>
     </div>
-    <div class="row" style="margin-bottom:0">
+    <div class="row">
       <label for="generation">Generation</label>
       <select id="generation">
         <option value="GenZ">Gen Z</option>
         <option value="GenX">Gen X</option>
       </select>
       <span class="level-note">Recorded on the response; it does not change the screens.</span>
+    </div>
+    <div class="row" style="margin-bottom:0">
+      <label for="language">Language</label>
+      <!-- Worth stepping through a cell in each language rather than trusting the
+           catalogue to be right. A translation can be accurate and still break the
+           screen: the swatch lock badge and the three sleeve pills are the tightest
+           places, and neither shows a problem until the words are actually in them. -->
+      <select id="language">
+        <option value="en">English</option>
+        <option value="si">සිංහල (Sinhala)</option>
+        <option value="ta">தமிழ் (Tamil)</option>
+      </select>
+      <span class="level-note">The whole study renders in this, including the reveal sentence and the Stage 4 controls.</span>
     </div>
   </div>
 
@@ -223,6 +236,7 @@
   async function launch(condition, level, button) {
     const generation = document.getElementById('generation').value;
     const gender = document.getElementById('gender').value;
+    const language = document.getElementById('language').value;
 
     button.disabled = true;
     setStatus('Seeding a session\u2026');
@@ -231,7 +245,7 @@
       const res = await fetch('/api/dev/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ generation, condition, level, gender })
+        body: JSON.stringify({ generation, condition, level, gender, language })
       });
 
       if (!res.ok) {

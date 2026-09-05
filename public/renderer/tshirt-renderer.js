@@ -131,12 +131,30 @@ export function toneTrackGradient() {
   return 'linear-gradient(90deg,' + stops.join(',') + ')';
 }
 
-export function toneLabelFor(t) {
-  if (t < 0.10) return 'Lightest';
-  if (t < 0.32) return 'Light';
-  if (t < 0.55) return 'Medium';
-  if (t < 0.80) return 'Deep';
-  return 'Darkest';
+/* The font the participant's own text is printed in, on the garment.
+ *
+ * Inter has no Sinhala or Tamil glyphs, and a participant typing in their own script
+ * with only "Inter, sans-serif" here gets a row of empty boxes printed on the shirt --
+ * then rates a garment carrying them. Canvas falls back per glyph, so naming the script
+ * faces ahead of the generic keeps Latin text in Inter and everything else in whichever
+ * of these the device actually has: Noto on Android, Nirmala UI on Windows, the Sangam
+ * faces on iOS and macOS. All are system fonts; nothing is fetched. */
+const TEXT_FONT_STACK =
+  'Inter, "Noto Sans Sinhala", "Noto Sans Tamil", "Nirmala UI", "Iskoola Pota", ' +
+  '"Sinhala Sangam MN", "Tamil Sangam MN", Latha, sans-serif';
+
+/* Which band of the slider a position falls in, named but not worded.
+ *
+ * The renderer ships to every participant in every language, so it must not carry the
+ * label itself: the words are per-language and, because this readout belongs to a
+ * Level 3 control, they arrive with the control bundle rather than the page. The
+ * thresholds are rendering logic and stay here, where the tone ramp they describe is. */
+export function toneBandFor(t) {
+  if (t < 0.10) return 'lightest';
+  if (t < 0.32) return 'light';
+  if (t < 0.55) return 'medium';
+  if (t < 0.80) return 'deep';
+  return 'darkest';
 }
 
 export function toneHexFor(t) {
@@ -590,7 +608,7 @@ export async function createRenderer(options) {
     const safeMaxWidth = W * 0.85;
     let fontSize = fontSizePx;
     const measure = () => {
-      octx.font = '800 ' + fontSize + 'px Inter, sans-serif';
+      octx.font = '800 ' + fontSize + 'px ' + TEXT_FONT_STACK;
       return Math.max.apply(null, lines.map((l) => octx.measureText(l).width));
     };
     let widest = measure();

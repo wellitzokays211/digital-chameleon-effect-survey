@@ -96,6 +96,14 @@ const COLUMNS = [
   /* demographics */
   ['birthYear', (r) => r.birthYear],
   ['gender', (r) => r.gender],
+  /* The language the participant consented, read the scale and answered in.
+   *
+   * Not a preference but a property of the measurement: the eight items are a
+   * translated instrument, so two participants who answered in different languages did
+   * not strictly answer the same question. Worth checking for imbalance across the
+   * twelve cells before treating it as noise, since nothing in the randomisation
+   * balances it. Empty for any session started before the picker existed. */
+  ['language', (r) => r.language || ''],
   ['onlineShoppingYears', (r) => r.ex1],
   ['purchaseFrequency', (r) => r.ex2],
 

@@ -14,6 +14,7 @@
  * their JavaScript, and the endpoint that serves it refuses their session. */
 
 import * as rt from '../renderer/tshirt-renderer.js';
+import { t } from '../shared/i18n.js';
 
 const MANIFEST_URL = '/assets/combos/manifest.json';
 
@@ -23,11 +24,15 @@ const MANIFEST_URL = '/assets/combos/manifest.json';
  * stage4CompletionSeconds is measured for both. If one group were urged to linger and
  * the other were not, a difference in how long they took would be partly a difference
  * in what they were asked to do, not in how the garment held them. Both invite the
- * same pause and name the same button, so change neither without changing the other. */
-/* "Continue" is capitalised because it names the button rather than describing an
-   action, and the button's own label is the participant's only reference for it. */
-const LOOK_HINT = 'Take a moment to look at this T-shirt, then click Continue.';
-const CUSTOMISE_HINT = 'Take a moment to customise and then click Continue when you are ready.';
+ * same pause and name the same button, so change neither without changing the other,
+ * in any of the three languages.
+ *
+ * Both name the Continue button through a placeholder filled from the button's own
+ * label, so the two cannot say different things. The label is what a participant
+ * matches the instruction against, and in Sinhala and Tamil there is no capitalisation
+ * to mark it out as the name of a thing rather than an ordinary verb. */
+const lookHint = () => t('stage4.lookHint', { continueButton: t('common.continue') });
+const customiseHint = () => t('stage4.customiseHint', { continueButton: t('common.continue') });
 
 let manifestPromise = null;
 function loadManifest() {
@@ -112,7 +117,7 @@ export function mount(handle, options) {
   const enabled = Boolean(customisation && customisation.enabled);
 
   const errorSlot = h('span', { class: 'error form-error', hidden: true, role: 'alert' });
-  const continueBtn = h('button', { class: 'cta', text: 'Continue' });
+  const continueBtn = h('button', { class: 'cta', text: t('common.continue') });
 
   let controlApi = null;
 
@@ -136,7 +141,7 @@ export function mount(handle, options) {
   continueBtn.addEventListener('click', async () => {
     errorSlot.hidden = true;
     continueBtn.disabled = true;
-    continueBtn.textContent = 'Saving\u2026';
+    continueBtn.textContent = t('common.saving');
 
     const payload = {
       customisation: collect(),
@@ -145,7 +150,7 @@ export function mount(handle, options) {
 
     onContinue(payload, (message) => {
       continueBtn.disabled = false;
-      continueBtn.textContent = 'Continue';
+      continueBtn.textContent = t('common.continue');
       errorSlot.textContent = message;
       errorSlot.hidden = false;
     });
@@ -158,7 +163,7 @@ export function mount(handle, options) {
   if (!enabled) {
     container.replaceChildren(
       h('div', { class: 'stage4 static-only' },
-        h('p', { class: 'stage4-instruction', text: LOOK_HINT }),
+        h('p', { class: 'stage4-instruction', text: lookHint() }),
         frame,
         continueBtn,
         errorSlot
@@ -195,14 +200,14 @@ export function mount(handle, options) {
   );
 
   async function startCustomising() {
-    controlsCol.replaceChildren(h('p', { class: 'hint', text: 'Loading\u2026' }));
+    controlsCol.replaceChildren(h('p', { class: 'hint', text: t('common.loading') }));
 
     let code;
     try {
       code = await fetchControls(options.sessionId || readSessionId());
     } catch {
       controlsCol.replaceChildren(
-        h('p', { class: 'hint', text: 'The customisation options could not be loaded.' }),
+        h('p', { class: 'hint', text: t('stage4.controlsUnavailable') }),
         continueBtn,
         errorSlot
       );
@@ -247,7 +252,7 @@ export function mount(handle, options) {
        scrolls through the controls, instead of sitting below a list they have to reach
        the bottom of. Added only once the controls are up, because until then there is
        no Continue button for it to be talking about. */
-    photoCol.prepend(h('p', { class: 'stage4-instruction', text: CUSTOMISE_HINT }));
+    photoCol.prepend(h('p', { class: 'stage4-instruction', text: customiseHint() }));
 
     controlsCol.append(continueBtn, errorSlot);
 

@@ -12,14 +12,17 @@
  *  2. `completed` is set in exactly one place, at Stage 5 submission. Until then the
  *     document is invisible to every count, every cap and every export. */
 
-import { COLOUR_POOL, QUESTIONNAIRE_ITEMS, LIKERT_MIN, LIKERT_MAX } from '../public/shared/study-config.js';
+import {
+  COLOUR_POOL,
+  QUESTIONNAIRE_ITEM_IDS,
+  LIKERT_MIN,
+  LIKERT_MAX
+} from '../public/shared/study-config.js';
+import { normaliseLanguage } from '../public/shared/languages.js';
 import {
   CONDITIONS,
   CONTROLS_BY_LEVEL,
-  CUSTOMISATION_CHANGES_BY_LEVEL,
-  CUSTOMISATION_CHANGES_HEADING,
-  CUSTOMISATION_CTA,
-  CUSTOMISATION_PROMPT,
+  CUSTOMISATION_CHANGE_KEYS_BY_LEVEL,
   FAST_COMPLETION_THRESHOLD_SECONDS,
   LEVELS,
   cellIdFor,
@@ -27,6 +30,7 @@ import {
   modelForGender,
   revealSentence
 } from './study-design.js';
+import { changeStrings, customisationStrings } from './strings-server.js';
 import { assignCell } from './randomise.js';
 import { computeEngagement, customisationForLevel } from './engagement.js';
 
@@ -43,7 +47,7 @@ export class StudyService {
 
   /* ---------------- Stage 1 ---------------- */
 
-  async startSession() {
+  async startSession({ language } = {}) {
     const sessionId = crypto.randomUUID();
     const timestamp = now();
 
@@ -51,6 +55,13 @@ export class StudyService {
        resume possible, and it stays `completed: false` until Stage 5 is submitted. */
     await this.store.insertSession({
       sessionId,
+      /* Written at creation, never afterwards. It is the language the consent form was
+         read in and the language every subsequent screen is composed in, so it is a
+         property of the response rather than a preference the participant may revise:
+         a scale answered in one wording having been read in another is not the same
+         measurement. Normalised rather than trusted, because a document with a junk
+         language would render as the key names on every screen. */
+      language: normaliseLanguage(language),
       stage: 'onboarding',
       completed: false,
       startedAt: timestamp,
@@ -70,7 +81,13 @@ export class StudyService {
     const doc = await this.store.findSession(sessionId);
     if (!doc) return null;
 
-    const state = { stage: doc.stage || 'onboarding' };
+    /* Returned first, because the client applies it before drawing anything. A session
+       resumed on a second device has no locally remembered choice to fall back on, so
+       without this the participant would be handed the rest of their study in English. */
+    const state = {
+      stage: doc.stage || 'onboarding',
+      language: normaliseLanguage(doc.language)
+    };
 
     if (doc.birthYear) {
       state.onboarding = {
@@ -213,33 +230,45 @@ export class StudyService {
     const colour = COLOUR_POOL.find((c) => c.hex === hex);
     const hasControls = (CONTROLS_BY_LEVEL[doc.assignedLevel] || []).length > 0;
 
+    const language = normaliseLanguage(doc.language);
+    const copy = customisationStrings(language);
+    const changeText = changeStrings(language);
+
     return {
-      revealSentence: revealSentence(colour ? colour.name : null, doc.assignedCondition),
+      revealSentence: revealSentence(colour ? colour.id : null, doc.assignedCondition, language),
       colourHex: hex,
       colourHsl: colour ? { h: colour.h, s: colour.s, l: colour.l } : null,
       model: modelForGender(doc.gender),
       customisation: hasControls
         ? {
             enabled: true,
-            prompt: CUSTOMISATION_PROMPT,
-            changesHeading: CUSTOMISATION_CHANGES_HEADING,
-            /* Only this level's items. The client is given a finished list rather than
-               a level to look up, so it never holds the mapping. */
-            changes: CUSTOMISATION_CHANGES_BY_LEVEL[doc.assignedLevel] || [],
-            cta: CUSTOMISATION_CTA
+            prompt: copy.prompt,
+            changesHeading: copy.changesHeading,
+            /* Only this level's items, and already translated. The client is given a
+               finished list rather than a level to look up, so it holds neither the
+               mapping nor the wording of an item it was not offered. */
+            changes: (CUSTOMISATION_CHANGE_KEYS_BY_LEVEL[doc.assignedLevel] || []).map(
+              (key) => changeText[key]
+            ),
+            cta: copy.cta
           }
         : { enabled: false },
       draft: doc.stage4Draft || null
     };
   }
 
-  /* Which controls this session is entitled to. The endpoint that builds the bundle
-   * asks here rather than trusting anything the browser claims, which is what makes
-   * the blinding boundary hold. */
+  /* Which controls this session is entitled to, and which language to label them in.
+   * The endpoint that builds the bundle asks here rather than trusting anything the
+   * browser claims, which is what makes the blinding boundary hold. The language comes
+   * from the document for the same reason: a header claiming Tamil would otherwise be a
+   * way to ask for a set of strings, and the strings are grouped by control. */
   async controlsFor(sessionId) {
     const doc = await this.store.findSession(sessionId);
     if (!doc || !doc.assignedLevel) return null;
-    return CONTROLS_BY_LEVEL[doc.assignedLevel] || [];
+    return {
+      controls: CONTROLS_BY_LEVEL[doc.assignedLevel] || [],
+      language: normaliseLanguage(doc.language)
+    };
   }
 
   /* ---------------- Stage 4 ---------------- */
@@ -291,12 +320,12 @@ export class StudyService {
     if (doc.stage !== 'questionnaire') return { outOfOrder: true };
 
     const values = {};
-    for (const item of QUESTIONNAIRE_ITEMS) {
-      const v = Number(answers?.[item.id]);
+    for (const id of QUESTIONNAIRE_ITEM_IDS) {
+      const v = Number(answers?.[id]);
       if (!Number.isInteger(v) || v < LIKERT_MIN || v > LIKERT_MAX) {
-        return { invalid: true, field: item.id };
+        return { invalid: true, field: id };
       }
-      values[item.id] = v;
+      values[id] = v;
     }
 
     await this.store.upsertSession(sessionId, {

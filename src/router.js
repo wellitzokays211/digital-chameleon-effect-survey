@@ -20,10 +20,11 @@ import {
 } from './study-design.js';
 import {
   COLOUR_POOL,
-  EX1_OPTIONS,
-  EX2_OPTIONS,
+  EX1_VALUES,
+  EX2_VALUES,
   GENDER_OPTIONS
 } from '../public/shared/study-config.js';
+import { DEFAULT_LANGUAGE, isLanguage } from '../public/shared/languages.js';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -81,8 +82,20 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
 
   /* ---------------- participant endpoints ---------------- */
 
-  async function handleStart() {
-    return json(await svc().startSession());
+  /* The language is optional on the wire and rejected if present and unrecognised.
+   *
+   * Optional because a cached copy of an older app.js would otherwise stop being able
+   * to start a session at all, which is a worse failure than a participant getting
+   * English. Rejected rather than quietly defaulted when it is present but wrong,
+   * because a typo in a language code is a bug worth surfacing at the point it happens
+   * rather than discovering later as a column of unexpected values in the export. */
+  async function handleStart(request) {
+    const body = await readJson(request);
+    const language = body?.language;
+    if (language !== undefined && language !== null && !isLanguage(language)) {
+      return badRequest('invalid language');
+    }
+    return json(await svc().startSession({ language: language || DEFAULT_LANGUAGE }));
   }
 
   async function handleResume(request) {
@@ -112,8 +125,8 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
        out-of-range experience answer is stored as a number nobody was ever offered.
        Both would reach the dataset looking like real answers. */
     if (!GENDER_OPTIONS.includes(gender)) return badRequest('invalid gender');
-    if (!EX1_OPTIONS.some((o) => o.value === Number(ex1))) return badRequest('invalid ex1');
-    if (!EX2_OPTIONS.some((o) => o.value === Number(ex2))) return badRequest('invalid ex2');
+    if (!EX1_VALUES.includes(Number(ex1))) return badRequest('invalid ex1');
+    if (!EX2_VALUES.includes(Number(ex2))) return badRequest('invalid ex2');
 
     /* Hashed in the request layer so the plaintext address is never passed into the
        service and cannot end up in an argument log or a stack trace. */
@@ -160,10 +173,13 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
     const sessionId = sessionIdFrom(request);
     if (!sessionId) return badRequest('missing session');
 
-    const controls = await svc().controlsFor(sessionId);
-    if (controls === null) return notFound('unknown session');
+    const entitlement = await svc().controlsFor(sessionId);
+    if (entitlement === null) return notFound('unknown session');
 
-    return new Response(buildControlBundle(controls), {
+    /* Both arguments come from the session document. The bundle is built with the
+       strings for these controls only, so a Level 2 response contains no wording for a
+       control that level does not have. */
+    return new Response(buildControlBundle(entitlement.controls, entitlement.language), {
       headers: {
         'Content-Type': 'text/javascript; charset=utf-8',
         /* Never cached. A shared cache holding one participant's bundle and serving
@@ -275,7 +291,14 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
     const gender = body.gender || 'Female';
     if (!GENDER_OPTIONS.includes(gender)) return badRequest('unknown gender');
 
-    const { sessionId } = await svc().startSession();
+    /* Named here as well as in the picker, so a cell can be inspected in each language.
+       Checking a translation against the live layout is the only way to catch a string
+       that is correct but too long for the control it sits in, and the swatch badge and
+       the sleeve pills are both tight enough for that to matter. */
+    const language = body.language || DEFAULT_LANGUAGE;
+    if (!isLanguage(language)) return badRequest('unknown language');
+
+    const { sessionId } = await svc().startSession({ language });
 
     /* Seeded through the real Stage 2 and Stage 3 methods, so the document is identical
        in shape to a participant's and Stage 4 exercises the same code paths. The
