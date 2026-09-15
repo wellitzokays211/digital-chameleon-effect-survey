@@ -47,7 +47,7 @@ export class StudyService {
 
   /* ---------------- Stage 1 ---------------- */
 
-  async startSession({ language } = {}) {
+  async startSession({ language, isPreview = false } = {}) {
     const sessionId = crypto.randomUUID();
     const timestamp = now();
 
@@ -62,6 +62,13 @@ export class StudyService {
          measurement. Normalised rather than trusted, because a document with a junk
          language would render as the key names on every screen. */
       language: normaliseLanguage(language),
+      /* Marks a session seeded by the cell preview rather than answered by a
+         participant. Every count and every export filters it out, so demonstrating a
+         cell -- including submitting the questionnaire at the end of one -- cannot
+         consume a slot against that cell's target or add a row to the dataset.
+         Coerced to a real boolean so the field is never absent on a preview and never
+         some truthy value that a `!== true` filter would let through. */
+      isPreview: Boolean(isPreview),
       stage: 'onboarding',
       completed: false,
       startedAt: timestamp,

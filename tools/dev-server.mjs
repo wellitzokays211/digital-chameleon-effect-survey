@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { createRouter } from '../src/router.js';
+import { previewPage } from '../src/preview-page.js';
 import { StudyService } from '../src/study-service.js';
 import { KvStore, MemoryKv } from '../src/stores.js';
 
@@ -70,12 +71,12 @@ async function serveAsset(request, url) {
      out of the served directory. */
   const requested = decodeURIComponent(url.pathname) === '/' ? '/index.html' : decodeURIComponent(url.pathname);
 
-  /* The preview picker is served from tools/ rather than public/ on purpose: public/ is
-     what gets uploaded to Cloudflare, so a page that names the conditions and levels
-     must not live there. Only this dev server can hand it out. */
-  if (requested === '/preview' || requested === '/preview.html') {
-    const body = await readFile(path.join(here, 'preview.html'));
-    return new Response(body, {
+  /* /preview is the router's now, because the deployed Worker serves it too -- behind a
+     token there, open here. This server only still answers /preview.html, for the older
+     URL. The page itself lives in src/preview-page.js rather than in public/, since
+     public/ is uploaded to Cloudflare and served with no gate in front of it. */
+  if (requested === '/preview.html') {
+    return new Response(previewPage(), {
       headers: { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' }
     });
   }

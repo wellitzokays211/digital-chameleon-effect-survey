@@ -22,9 +22,15 @@ import {
   COLOUR_POOL,
   EX1_VALUES,
   EX2_VALUES,
-  GENDER_OPTIONS
+  GENDER_OPTIONS,
+  colourByHex
 } from '../public/shared/study-config.js';
 import { DEFAULT_LANGUAGE, isLanguage } from '../public/shared/languages.js';
+import {
+  PREVIEW_DEFAULT_DISLIKED,
+  PREVIEW_DEFAULT_LIKED,
+  previewPage
+} from './preview-page.js';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -268,17 +274,100 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
     return json(await svc().health());
   }
 
-  /* ---------------- development preview ----------------
+  /* ---------------- the cell preview ----------------
    *
    * Seeds a session that is already consented, onboarded and calibrated, and assigns it
    * to a named cell, so all three customisation levels can be inspected deliberately
    * instead of by restarting until randomisation happens to deal them out.
    *
-   * It is gated structurally rather than by a runtime environment check. The route is
-   * added to the table only when the host passes `preview: true`; tools/dev-server.mjs
-   * does, src/index.js does not. On the deployed Worker there is therefore no such path
-   * to call -- not a guarded one, an absent one -- and no request, token or header can
-   * conjure it back. */
+   * On the dev server it is simply open: the host passes `preview: true`.
+   *
+   * On the deployed Worker it is reachable, which it did not used to be, and that is a
+   * deliberate downgrade made so the design can be demonstrated from the live URL. What
+   * used to be a structural guarantee -- no such path exists -- is now a credential, so
+   * three things carry the weight instead:
+   *
+   *   - A dedicated PREVIEW_TOKEN, never ADMIN_TOKEN. If the preview link escapes, the
+   *     holder can look at cells; they cannot export the dataset or delete the
+   *     participant table. Least privilege matters more here than one fewer secret.
+   *   - Absent by default. With no PREVIEW_TOKEN configured there is no way in, so a
+   *     deployment that never sets it behaves exactly as it did before.
+   *   - 404 on refusal, never 401. An unauthorised caller cannot tell this endpoint
+   *     apart from one that was never registered, and GET /preview without the cookie
+   *     falls through to the study's own entry point like any other deep link. A
+   *     participant who guesses the path learns nothing from the response.
+   *
+   * The token is exchanged once, via ?key=, for an HttpOnly cookie and then dropped
+   * from the URL by a redirect -- the address bar is the one place a token must not sit
+   * while a study is being presented to a room. */
+
+  const PREVIEW_COOKIE = 'preview_gate';
+
+  function cookieValue(request, name) {
+    const header = request.headers.get('Cookie') || '';
+    for (const part of header.split(';')) {
+      const [k, ...rest] = part.trim().split('=');
+      if (k === name) return rest.join('=');
+    }
+    return null;
+  }
+
+  /* `preview: true` is the dev server saying the gate does not apply. Otherwise a
+     token must be configured AND presented; either missing means no. */
+  function previewAllowed(request) {
+    if (preview) return true;
+    if (!env.PREVIEW_TOKEN) return false;
+    const header = request.headers.get('Authorization') || '';
+    const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
+    return tokensMatch(bearer, env.PREVIEW_TOKEN)
+      || tokensMatch(cookieValue(request, PREVIEW_COOKIE) || '', env.PREVIEW_TOKEN);
+  }
+
+  /* Four hundred days, which is the longest Chrome will honour.
+   *
+   * The point is that /preview is then simply a working URL in the browser that was
+   * unlocked once, and still nothing at all in every other browser. A short expiry
+   * meant re-unlocking before each use, which in practice means pasting the ?key= URL
+   * again -- exactly the thing that must not happen on a shared screen. Making the
+   * unlock rare makes it easier to do privately.
+   *
+   * Revocation is by rotating PREVIEW_TOKEN, which invalidates every cookie issued
+   * against the old one at once, since the cookie carries the token itself rather than
+   * a signature over it. */
+  const PREVIEW_COOKIE_MAX_AGE = 400 * 24 * 60 * 60;
+
+  async function handlePreviewPage(request, url) {
+    if (previewAllowed(request)) {
+      return new Response(previewPage(), {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex, nofollow'
+        }
+      });
+    }
+
+    /* Exchanging the key for a cookie, then redirecting to the bare path so the token
+       is not left in the address bar, in the history entry that gets bookmarked, or in
+       a screen recording. Secure is omitted on http so this still works against the
+       dev server; the deployed Worker is https-only. */
+    const key = url.searchParams.get('key');
+    if (key && env.PREVIEW_TOKEN && tokensMatch(key, env.PREVIEW_TOKEN)) {
+      const secure = url.protocol === 'https:' ? ' Secure;' : '';
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: url.pathname,
+          'Cache-Control': 'no-store',
+          'Set-Cookie': `${PREVIEW_COOKIE}=${key}; Path=/;${secure} HttpOnly;`
+            + ` SameSite=Strict; Max-Age=${PREVIEW_COOKIE_MAX_AGE}`
+        }
+      });
+    }
+
+    /* Indistinguishable from any other unrecognised path. */
+    return serveAsset(request, url);
+  }
 
   async function handlePreview(request) {
     const body = await readJson(request);
@@ -298,7 +387,28 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
     const language = body.language || DEFAULT_LANGUAGE;
     if (!isLanguage(language)) return badRequest('unknown language');
 
-    const { sessionId } = await svc().startSession({ language });
+    /* Which two hues the participant would have picked in Stage 3. Named so a specific
+       colour can be put on the garment deliberately -- the condition decides which of
+       the two is worn, so showing a chosen colour means setting it as the liked one and
+       opening a Liked cell.
+
+       Validated against the pool by hex rather than trusted, because saveCalibration
+       will refuse anything off-pool and the resulting failure would surface as the
+       generic "could not seed calibration" with nothing pointing at the cause. */
+    const likedColourHex = body.likedColourHex || PREVIEW_DEFAULT_LIKED;
+    const dislikedColourHex = body.dislikedColourHex || PREVIEW_DEFAULT_DISLIKED;
+    if (!colourByHex(likedColourHex) || !colourByHex(dislikedColourHex)) {
+      return badRequest('colour is not in the pool');
+    }
+    if (likedColourHex.toLowerCase() === dislikedColourHex.toLowerCase()) {
+      return badRequest('the two colours must differ');
+    }
+
+    /* Tagged from the first write, not at assignment, so even a preview abandoned
+       before a cell is chosen is already marked and excluded from the counts and the
+       exports. Untagged preview rows would otherwise be indistinguishable from real
+       participants in the dataset. */
+    const { sessionId } = await svc().startSession({ language, isPreview: true });
 
     /* Seeded through the real Stage 2 and Stage 3 methods, so the document is identical
        in shape to a participant's and Stage 4 exercises the same code paths. The
@@ -313,10 +423,8 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
     );
     if (!onboarded.ok) return badRequest('could not seed onboarding');
 
-    /* Two visibly different hues, so which one the reveal names tells you at a glance
-       whether you are looking at the liked or the disliked condition. */
     const calibrated = await svc().saveCalibration(
-      sessionId, COLOUR_POOL[0].hex, COLOUR_POOL[5].hex
+      sessionId, likedColourHex, dislikedColourHex
     );
     if (!calibrated.ok) return badRequest('could not seed calibration');
 
@@ -336,8 +444,7 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
     'POST /api/stage4/controls': handleControls,
     'POST /api/stage4/draft': handleDraft,
     'POST /api/stage4': handleStage4,
-    'POST /api/submit': handleSubmit,
-    ...(preview ? { 'POST /api/dev/preview': handlePreview } : {})
+    'POST /api/submit': handleSubmit
   };
 
   const ADMIN_ROUTES = {
@@ -361,6 +468,14 @@ export function createRouter({ service, env, serveAsset, preview = false }) {
 
       const handler = ROUTES[key];
       if (handler) return await handler(request);
+
+      /* Both preview paths refuse by looking like nothing: the API route returns the
+         same 404 an unregistered path would, and the page falls through to the study's
+         entry point. Neither confirms it exists to a caller without the token. */
+      if (key === 'GET /preview') return await handlePreviewPage(request, url);
+      if (key === 'POST /api/dev/preview') {
+        return previewAllowed(request) ? await handlePreview(request) : notFound('no such endpoint');
+      }
 
       if (url.pathname.startsWith('/api/')) return notFound('no such endpoint');
 

@@ -194,6 +194,22 @@ for (const code of LANGUAGE_CODES.filter((c) => c !== DEFAULT_LANGUAGE)) {
     ),
     'an English anchor on a translated scale changes what the midpoint means'
   );
+  /* The two ends must not read alike. A participant who cannot tell them apart may
+     answer the reverse of what they mean, and a reversed item is indistinguishable
+     from a sincere one in the data -- there is nothing to filter on afterwards. */
+  check(
+    `the ${code} Likert anchors are distinguishable from each other`,
+    translate(code, 'questionnaire.likertMin') !== translate(code, 'questionnaire.likertMax'),
+    'identical ends would make the direction of the scale unrecoverable'
+  );
+  /* The standing instruction is the only place the direction is spelled out in a full
+     sentence, so it has to name both ends by number. */
+  const guide = translate(code, 'questionnaire.scaleGuide');
+  check(
+    `the ${code} scale guide names both ends of the range`,
+    guide.includes('{min}') && guide.includes('{max}'),
+    'a guide that loses a placeholder stops stating which end is which'
+  );
 }
 
 /* The server-side half has no fallback report of its own, so it is walked here. Its
@@ -1049,44 +1065,281 @@ check(
   'at a third of a phone-width column the padding decides whether the label wraps'
 );
 
-/* ---------------- the development preview must not exist in production ----------------
- *
- * The preview route opens any cell on demand, which is precisely what a participant must
- * never be able to do. It is gated by the host passing `preview: true` rather than by an
- * environment variable, so the assertions that matter are that the route is absent from
- * the default table, that the Worker entry point never switches it on, and that no trace
- * of it reaches public/. The router is exercised in-process here, with the real service
- * over an in-memory store, so this half needs no server. */
+section('Response scale legibility');
 
-section('Development preview is dev-only');
+/* Statement, then the row, then the anchors under the ends they label.
+ *
+ * Reversing 1 and 7 on an agreement scale inverts the item and leaves no trace: a
+ * sincere disagreement and a mistaken agreement are the same stored number, and
+ * nothing downstream can filter on it. The anchors sit after the row, so they are read
+ * after the choice; the guard against that is redundancy rather than order. Each
+ * anchor carries its own number, and the standing instruction states the direction in
+ * full before the first item. All three are asserted here because losing any one of
+ * them leaves the binding resting on a single silent point of failure. */
+const questionnaireSource = appSource.slice(
+  appSource.indexOf('function renderQuestionnaire'),
+  appSource.indexOf('function renderDone')
+);
+const anchorsAt = questionnaireSource.indexOf("class: 'likert-ends'");
+const scaleAt = questionnaireSource.search(/^\s*scale,$/m);
+const statementAt = questionnaireSource.indexOf("class: 'likert-statement'");
+check(
+  'the questionnaire source was located',
+  questionnaireSource.length > 500 && anchorsAt !== -1 && scaleAt !== -1 && statementAt !== -1,
+  'the checks below are vacuous if this failed -- renderQuestionnaire moved'
+);
+check(
+  'the statement is asked above the row and the anchors label it below',
+  statementAt < scaleAt && scaleAt < anchorsAt,
+  'the question has to precede the boxes and the anchors have to follow them'
+);
+check(
+  'each anchor carries its number as well as its wording',
+  /\$\{LIKERT_MIN\} = \$\{t\('questionnaire\.likertMin'\)\}/.test(questionnaireSource) &&
+    /\$\{LIKERT_MAX\} = \$\{t\('questionnaire\.likertMax'\)\}/.test(questionnaireSource),
+  'below the row, the number is what ties each word back to its own end'
+);
+check(
+  'the anchors are individually addressable for styling',
+  /class: 'end-min'/.test(questionnaireSource) && /class: 'end-max'/.test(questionnaireSource),
+  'the two ends cannot be distinguished from each other without these'
+);
+
+/* The arrows are the cue that survives everything else: they do not depend on reading
+   the words, on the script being one the participant reads fluently, or on telling two
+   colours apart. Red and green were the obvious alternative and were rejected -- the
+   pool carries green at hue 125 and reds at 17 and 340, so colouring the scale would
+   tie two of the manipulation's own hues to agreement and disagreement. */
+const minArrowAt = questionnaireSource.indexOf("class: 'end-min'");
+const maxArrowAt = questionnaireSource.indexOf("class: 'end-max'");
+check(
+  'each end is marked with an arrow pointing at its own side of the row',
+  /class: 'end-arrow'[^)]*text: '\\u2190'/.test(questionnaireSource) &&
+    /class: 'end-arrow'[^)]*text: '\\u2192'/.test(questionnaireSource),
+  'without a non-verbal cue the direction rests entirely on reading the labels'
+);
+check(
+  'the left arrow belongs to the low end and the right arrow to the high end',
+  questionnaireSource.indexOf("'\\u2190'") > minArrowAt &&
+    questionnaireSource.indexOf("'\\u2190'") < maxArrowAt &&
+    questionnaireSource.indexOf("'\\u2192'") > maxArrowAt,
+  'an arrow pointing away from the end it labels is worse than none'
+);
+check(
+  'the arrows are hidden from screen readers',
+  (questionnaireSource.match(/'aria-hidden': 'true', text: '\\u21(90|92)'/g) || []).length === 2,
+  'a reader that announces "left arrow" before every anchor adds noise, not direction'
+);
+
+check(
+  'the standing scale instruction precedes the items',
+  questionnaireSource.indexOf("class: 'scale-guide'") < questionnaireSource.search(/^\s*items,$/m),
+  'an instruction after the items is an instruction nobody reads in time'
+);
+
+/* Two slices of the stylesheet: the .likert-ends rule body on its own, and every anchor
+   rule up to the next media query.
+ *
+ * The second is bounded by the media query that FOLLOWS the anchors. Searching from
+ * zero finds an earlier one, slices backwards, and yields an empty string -- which is
+ * how the colour check below first passed while testing nothing at all. */
+const endsAt = cssSource.indexOf('.likert-ends {');
+const endsBlock = cssSource.slice(endsAt, cssSource.indexOf('}', endsAt));
+const anchorRules = cssSource.slice(endsAt, cssSource.indexOf('@media', endsAt));
+check(
+  'the anchor styling was located',
+  anchorRules.includes('.end-arrow') && anchorRules.includes('.likert-ends > span'),
+  'the two checks below are vacuous if this failed'
+);
+
+/* The scale must not be colour-coded. This study asks participants to rank ten hues
+   spanning the wheel at one saturation and lightness, so any saturated pair chosen here
+   sits near two pool colours -- red/green worst of all, since the pool carries green at
+   hue 125 and reds at 17 and 340, which would tie two of the manipulation's own hues to
+   agreement and disagreement. Red/green additionally signals that agreeing is the
+   correct answer, inflating acquiescence across every condition. */
+const scaleColourLeak = ['--error', 'red', 'green', '#0', '#1', '#2', '#3', '#4', '#5',
+  '#6', '#7', '#8', '#9', '#a', '#b', '#c', '#d', '#e', '#f']
+  .filter((token) => anchorRules.toLowerCase().includes(`color: ${token}`));
+check(
+  'the anchors are not colour-coded',
+  scaleColourLeak.length === 0,
+  `found a literal colour on the scale anchors: ${scaleColourLeak.join(', ')}`
+);
+
+/* The anchors carry the meaning of the row, so they cannot be the quietest thing on it.
+   They were 11px in soft grey against a 15px statement, which is how a participant ends
+   up reading the row without reading its direction. */
+check(
+  'the anchors are set in full-strength ink, not the soft grey',
+  /color: var\(--ink\);/.test(endsBlock) && !/var\(--ink-soft\)/.test(endsBlock),
+  'the text the row depends on cannot be the faintest text on the row'
+);
+check(
+  'the anchors are spaced below the row, not above it',
+  /margin: 8px 0 0;/.test(endsBlock),
+  'a bottom margin here would push them back above the buttons'
+);
+
+/* Emphasis belongs on the words, not on the end buttons. Styling 1 and 7 to stand out
+   from 2 through 6 would raise extreme responding, which shifts the distribution rather
+   than clarifying the direction -- a measurement change dressed as a readability fix. */
+check(
+  'the end buttons are not styled apart from the middle ones',
+  !/\.likert-point:(first|last)-(child|of-type)/.test(cssSource),
+  'privileging the extremes visually would inflate extreme responding'
+);
+
+/* ---------------- the cell preview must stay out of participants' reach ----------------
+ *
+ * The preview opens any cell on demand, and its picker page names both conditions and
+ * all three levels. It is now reachable on the deployed Worker so the design can be
+ * demonstrated from the live URL, which replaced a structural guarantee -- no such path
+ * exists -- with a credential. That trade is only sound if the credential behaves, so
+ * what used to be one check ("the route is absent") is now a section.
+ *
+ * What has to hold: nothing without the token, no token configured means no way in at
+ * all, refusal is indistinguishable from a path that was never registered, the token is
+ * not the admin one, and the page never lands in public/. The router is exercised
+ * in-process over an in-memory store, so none of this needs a server. */
+
+section('The cell preview is reachable only with its own token');
+
+const PREVIEW_TOKEN = 'self-check-preview-token';
 
 function routerFor(options) {
   return createRouter({
     service: new StudyService(new KvStore(new MemoryKv(), 'self-check')),
     env: { EMAIL_HASH_SALT: 'self-check-salt', ADMIN_TOKEN: 'self-check-token' },
-    serveAsset: async () => new Response('asset'),
+    serveAsset: async () => new Response('the study itself'),
     ...options
   });
 }
 
-const previewBody = (condition, level) => JSON.stringify({
-  generation: 'GenZ', condition, level, gender: 'Male'
+const previewBody = (condition, level, extra = {}) => JSON.stringify({
+  generation: 'GenZ', condition, level, gender: 'Male', ...extra
 });
 
-function previewRequest(condition, level) {
+function previewRequest(condition, level, { headers = {}, ...extra } = {}) {
   return new Request('http://localhost/api/dev/preview', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: previewBody(condition, level)
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: previewBody(condition, level, extra)
   });
 }
 
-const closedRouter = routerFor({});
-const closed = await closedRouter(previewRequest('Liked', 3));
+/* Nothing configured: the preview must be as unreachable as it was before it existed
+   here at all, so a deployment that never sets the secret is unchanged. */
+const unconfigured = routerFor({});
 check(
-  'the preview route is absent unless the host enables it',
-  closed.status === 404,
-  `got ${closed.status}; the deployed Worker must have no such path at all`
+  'with no token configured the preview API is closed',
+  (await unconfigured(previewRequest('Liked', 3))).status === 404,
+  'an unset secret must mean no way in, not a way in with no password'
+);
+const unconfiguredPage = await unconfigured(
+  new Request('http://localhost/preview?key=anything')
+);
+check(
+  'with no token configured the picker cannot be unlocked',
+  unconfiguredPage.status === 200 && (await unconfiguredPage.text()) === 'the study itself',
+  'any key must be refused outright when there is nothing to compare it against'
+);
+
+const gated = routerFor({ env: {
+  EMAIL_HASH_SALT: 'self-check-salt',
+  ADMIN_TOKEN: 'self-check-token',
+  PREVIEW_TOKEN
+} });
+
+/* Refusal has to look like absence. A 401 would confirm to a participant poking at
+   paths that there is something here worth guessing a password for. */
+const noToken = await gated(previewRequest('Liked', 3));
+check(
+  'the preview API refuses an unauthorised caller with 404, not 401',
+  noToken.status === 404,
+  `got ${noToken.status}; 401 advertises that the endpoint exists`
+);
+const wrongToken = await gated(previewRequest('Liked', 3, {
+  headers: { Authorization: 'Bearer wrong-token-of-the-same-length' }
+}));
+check('a wrong preview token is refused', wrongToken.status === 404, `got ${wrongToken.status}`);
+
+/* The admin token must not be a way in. If the preview link leaks, the holder should be
+   able to look at cells and nothing else -- not export the dataset, not delete the
+   participant table. */
+const adminAsPreview = await gated(previewRequest('Liked', 3, {
+  headers: { Authorization: 'Bearer self-check-token' }
+}));
+check(
+  'the admin token does not open the preview',
+  adminAsPreview.status === 404,
+  'the two credentials must not be interchangeable in either direction'
+);
+const previewAsAdmin = await gated(new Request('http://localhost/api/admin/counts', {
+  headers: { Authorization: `Bearer ${PREVIEW_TOKEN}` }
+}));
+check(
+  'the preview token does not open the admin endpoints',
+  previewAsAdmin.status === 401,
+  `got ${previewAsAdmin.status}; a leaked preview link must not reach the data`
+);
+
+/* GET /preview without the cookie has to be indistinguishable from any other deep
+   link, which the study answers with its own entry point. */
+const lockedPage = await gated(new Request('http://localhost/preview'));
+check(
+  'the picker page is not served without the gate cookie',
+  lockedPage.status === 200 && (await lockedPage.text()) === 'the study itself',
+  'an unauthorised visitor must get the study, not the picker and not an error'
+);
+
+/* The key is exchanged for a cookie and then dropped from the URL, because the address
+   bar is the one place a token must not sit while presenting to a room. */
+const unlock = await gated(new Request(`http://localhost/preview?key=${PREVIEW_TOKEN}`));
+const setCookie = unlock.headers.get('Set-Cookie') || '';
+check(
+  'a correct key redirects to the bare path so the token leaves the URL',
+  unlock.status === 302 && unlock.headers.get('Location') === '/preview',
+  `got ${unlock.status} to ${unlock.headers.get('Location')}`
+);
+for (const [what, needle] of [
+  ['is not readable from JavaScript', 'HttpOnly'],
+  ['does not ride along on cross-site requests', 'SameSite=Strict'],
+  ['expires rather than lasting forever', 'Max-Age=']
+]) {
+  check(`the gate cookie ${what}`, setCookie.includes(needle), `Set-Cookie: ${setCookie}`);
+}
+check(
+  'the gate cookie is marked Secure over https',
+  ((await gated(new Request(`https://localhost/preview?key=${PREVIEW_TOKEN}`)))
+    .headers.get('Set-Cookie') || '').includes('Secure'),
+  'a cookie without Secure can be sent over a downgraded connection'
+);
+
+/* And with the cookie, the page itself -- confirmed by something only the picker says. */
+const unlockedPage = await gated(new Request('http://localhost/preview', {
+  headers: { Cookie: `preview_gate=${PREVIEW_TOKEN}` }
+}));
+const unlockedBody = unlockedPage.status === 200 ? await unlockedPage.text() : '';
+check(
+  'the cookie serves the picker',
+  unlockedBody.includes('Preview a cell') && unlockedBody.includes('not for participants'),
+  'the gate opens or it does not; this is the half that must still work'
+);
+check(
+  'the picker asks not to be indexed',
+  unlockedBody.includes('noindex'),
+  'a page naming the conditions must not end up in a search result'
+);
+
+/* The page is bundled into the Worker, so the one thing that must remain true is that
+   it is not also sitting in public/, which is uploaded and served with no gate. */
+const publicAssetNames = await readdir(new URL('../public/', import.meta.url), { recursive: true });
+const strayPicker = publicAssetNames.filter((name) => /preview/i.test(String(name)));
+check(
+  'the picker is not among the static assets',
+  strayPicker.length === 0,
+  `found in public/: ${strayPicker.join(', ')}`
 );
 
 const openRouter = routerFor({ preview: true });
@@ -1139,6 +1392,126 @@ const looseGender = await openRouter(new Request('http://localhost/api/dev/previ
   body: JSON.stringify({ generation: 'GenZ', condition: 'Liked', level: 1, gender: 'female' })
 }));
 check('the preview refuses a gender that is not one of the offered options', looseGender.status === 400);
+
+/* Naming the two colours is what lets a particular hue be put on the garment
+   deliberately, which is the point of previewing for a presentation rather than a test.
+   The condition decides which of the two is worn, so a Liked cell must come back
+   wearing the liked colour and a Disliked cell the other one -- if that were crossed,
+   a demonstration would show the wrong colour while looking entirely plausible. */
+const chosenLiked = COLOUR_POOL[3].hex;
+const chosenDisliked = COLOUR_POOL[8].hex;
+for (const [condition, expected] of [['Liked', chosenLiked], ['Disliked', chosenDisliked]]) {
+  const res = await openRouter(previewRequest(condition, 2, {
+    likedColourHex: chosenLiked,
+    dislikedColourHex: chosenDisliked
+  }));
+  const body = res.status === 200 ? await res.json() : null;
+  check(
+    `a ${condition} preview renders the colour asked for`,
+    body?.assignment?.colourHex?.toLowerCase() === expected.toLowerCase(),
+    `got ${body?.assignment?.colourHex}, wanted ${expected}`
+  );
+}
+
+/* Defaults matter: the picker is not the only caller, and a preview with no colours
+   named must still seed rather than fail. */
+const defaultColours = await openRouter(previewRequest('Liked', 1));
+check(
+  'a preview with no colours named still seeds',
+  defaultColours.status === 200,
+  `status ${defaultColours.status}`
+);
+
+/* Refused here rather than left to saveCalibration, whose failure surfaces as a generic
+   "could not seed calibration" with nothing pointing at the cause. */
+const offPool = await openRouter(previewRequest('Liked', 1, { likedColourHex: '#123456' }));
+check('the preview refuses a colour that is not in the pool', offPool.status === 400,
+  `status ${offPool.status}`);
+const sameBoth = await openRouter(previewRequest('Liked', 1, {
+  likedColourHex: chosenLiked, dislikedColourHex: chosenLiked
+}));
+check('the preview refuses the same colour for both choices', sameBoth.status === 400,
+  `status ${sameBoth.status}`);
+
+/* The picker's menus are built from COLOUR_POOL, so every hue the route will accept is
+   offered and nothing it would refuse is. Typed-out options would drift the moment a
+   hue was added. */
+const pickerBody = await (await gated(new Request('http://localhost/preview', {
+  headers: { Cookie: `preview_gate=${PREVIEW_TOKEN}` }
+}))).text();
+const missingFromPicker = COLOUR_POOL.filter((c) => !pickerBody.includes(c.hex));
+check(
+  'the picker offers every hue in the pool',
+  missingFromPicker.length === 0,
+  `absent: ${missingFromPicker.map((c) => c.id).join(', ')}`
+);
+check(
+  'the picker names the hues rather than only showing their hex',
+  COLOUR_POOL.every((c) => pickerBody.includes(translate('en', colourKey(c)))),
+  'a menu of ten hex codes is not usable while presenting'
+);
+
+/* ---------------- preview sessions must not enter the dataset ----------------
+ *
+ * The preview writes through the real Stage 2 and 3 methods, so its documents land in
+ * the same collection as participants'. On the dev server that was harmless. On
+ * production it is not: walking a cell to the end of the questionnaire sets
+ * `completed: true`, and without a marker that row would consume a slot against the
+ * cell's target of 20 and appear in the CSV as a participant. */
+
+const taggingStore = new KvStore(new MemoryKv(), 'self-check');
+const taggingService = new StudyService(taggingStore);
+
+const realSession = await taggingService.startSession({});
+const previewSession = await taggingService.startSession({ isPreview: true });
+check(
+  'a preview session is marked and an ordinary one is not',
+  (await taggingStore.findSession(previewSession.sessionId)).isPreview === true &&
+    (await taggingStore.findSession(realSession.sessionId)).isPreview === false,
+  'the marker has to be present on one and absent on the other, not merely falsy'
+);
+
+/* Both made to look like finished responses in the same cell, so the only thing
+   separating them is the marker. */
+for (const { sessionId } of [realSession, previewSession]) {
+  await taggingStore.upsertSession(sessionId, { completed: true, cellId: 7 });
+}
+check(
+  'a completed preview consumes no slot against the cell target',
+  (await taggingStore.completedCountsByCell())[7] === 1,
+  'a demonstration must not spend one of the twenty responses a cell is waiting for'
+);
+check(
+  'a completed preview is absent from the export',
+  (await taggingStore.listCompleted()).length === 1,
+  'a preview row in the export is indistinguishable from real data once it is a CSV'
+);
+
+/* Documents written before the field existed carry no marker at all, and those
+   participants are mid-study. They must still count.
+ *
+ * Inserted without the field rather than by deleting it from a document the store
+ * handed back, which would have tested nothing if that document were a copy -- and
+ * would have passed either way, since a false marker is counted too. */
+await taggingStore.insertSession({
+  sessionId: crypto.randomUUID(),
+  language: 'en',
+  stage: 'questionnaire',
+  completed: true,
+  cellId: 7,
+  startedAt: new Date(),
+  lastUpdatedAt: new Date()
+});
+check(
+  'a response predating the marker still counts',
+  (await taggingStore.completedCountsByCell())[7] === 2,
+  'the filter must exclude previews, not everything that fails to say it is not one'
+);
+check(
+  'and it is still exported',
+  (await taggingStore.listCompleted()).length === 2,
+  'an equality test on the marker would silently drop every pre-existing response'
+);
 
 const workerEntry = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
 check(
@@ -1194,11 +1567,11 @@ function paramList(source, name) {
 const serviceMethods = Object.getOwnPropertyNames(StudyService.prototype)
   .filter((name) => name !== 'constructor' && typeof StudyService.prototype[name] === 'function');
 
+/* previewAssign used to be excluded here, on the grounds that it was dev-only. Once the
+   preview became reachable on the deployed Worker that exemption became the bug it was
+   meant to prevent: the route would authorise, then call a method the stub does not
+   have. Every service method now needs a pass-through, with no exceptions. */
 for (const name of serviceMethods) {
-  /* previewAssign is dev-only and deliberately absent from the RPC surface: exposing it
-     there would put a forced-assignment route one call away from production. */
-  if (name === 'previewAssign') continue;
-
   const expected = paramList(serviceSource, name);
   const declared = paramList(dataSource, name);
 
@@ -1229,9 +1602,8 @@ for (const name of serviceMethods) {
 
 /* public/ is the only directory uploaded as static assets, so a preview page or fetch
    living there would be readable by any participant who opened dev tools. */
-const publicFiles = await readdir(new URL('../public/', import.meta.url), { recursive: true });
 const previewInPublic = [];
-for (const name of publicFiles) {
+for (const name of publicAssetNames) {
   if (!/\.(js|html|css|json)$/.test(name)) continue;
   const text = await readFile(new URL(`../public/${name}`, import.meta.url), 'utf8').catch(() => '');
   if (text.includes('/api/dev/')) previewInPublic.push(name);

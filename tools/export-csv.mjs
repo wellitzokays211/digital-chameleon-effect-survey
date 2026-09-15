@@ -201,6 +201,16 @@ if (incomplete) {
   console.log('  endpoint should never return those -- worth investigating.');
 }
 
+/* Sessions seeded by the cell preview are filtered out by listCompleted, so finding one
+   here means that filter is not doing its job and the dataset has demonstration runs
+   mixed into it. Loud, because it is indistinguishable from real data once exported. */
+const previews = responses.filter((r) => r.isPreview === true).length;
+if (previews) {
+  console.log(`\n  WARNING: ${previews} row(s) are preview sessions, not participants.`);
+  console.log('  These must not be in an export. Exclude them before analysing and');
+  console.log('  check listCompleted in src/stores.js.');
+}
+
 const fast = responses.filter((r) => r.flaggedFast === true).length;
 if (fast) {
   console.log(`\n  ${fast} response(s) flagged as fast (Stage 4 under the threshold).`);

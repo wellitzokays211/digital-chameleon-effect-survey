@@ -791,12 +791,33 @@ function renderQuestionnaire() {
 
     errors[id] = fieldError();
 
+    /* Statement, then the row, then the anchors under the ends they label.
+     *
+     * The anchors are the only thing standing between a participant and answering the
+     * reverse of what they mean, and a reversed item leaves no trace: a sincere
+     * disagreement and a mistaken agreement are the same stored number. Being below
+     * the row, they are read after it, so they carry their number with them and the
+     * direction is also stated in full in the standing instruction above the first
+     * item -- three statements of the same binding, none of which depends on the
+     * participant having read the one before it. */
     return h('div', { class: 'likert-item' },
       h('p', { class: 'likert-statement', text: statement }),
       scale,
+      /* Each arrow points at the end of the row its label belongs to, which reads
+         before the words do and does not depend on language, on literacy in the
+         script, or on distinguishing two colours. It lives here rather than in the
+         catalogues because it is a glyph, not wording -- all three languages get it
+         without a translator having to carry it -- and it is hidden from screen
+         readers, which get the number and the word and need no help with direction. */
       h('div', { class: 'likert-ends' },
-        h('span', { text: `${LIKERT_MIN} \u2014 ${t('questionnaire.likertMin')}` }),
-        h('span', { text: `${LIKERT_MAX} \u2014 ${t('questionnaire.likertMax')}` })
+        h('span', { class: 'end-min' },
+          h('span', { class: 'end-arrow', 'aria-hidden': 'true', text: '\u2190' }),
+          `${LIKERT_MIN} = ${t('questionnaire.likertMin')}`
+        ),
+        h('span', { class: 'end-max' },
+          `${LIKERT_MAX} = ${t('questionnaire.likertMax')}`,
+          h('span', { class: 'end-arrow', 'aria-hidden': 'true', text: '\u2192' })
+        )
       ),
       errors[id]
     );
@@ -834,6 +855,13 @@ function renderQuestionnaire() {
     h('div', { class: 'card' },
       h('h1', { text: t('questionnaire.title') }),
       h('p', { class: 'lede', text: t('questionnaire.lede') }),
+      /* Stated once, plainly, before the first item: which end of the row means what.
+         The per-item anchors repeat it, but a participant who scrolled straight to the
+         boxes needs to have met the direction before they meet the first one. */
+      h('p', {
+        class: 'scale-guide',
+        text: t('questionnaire.scaleGuide', { min: LIKERT_MIN, max: LIKERT_MAX })
+      }),
       items,
       submit,
       formErr

@@ -196,8 +196,13 @@ export default {
   'questionnaire.title': 'A few final questions',
   'questionnaire.lede':
     'Rate each statement from 1 (strongly disagree) to 7 (strongly agree). All are required.',
+  /* The two ends of the response scale, shown above every row. Reversing them inverts
+     an item and leaves no trace in the data, so both the number and the word appear
+     together and the direction is restated in scaleGuide below. */
   'questionnaire.likertMin': 'Strongly disagree',
   'questionnaire.likertMax': 'Strongly agree',
+  'questionnaire.scaleGuide':
+    'For every statement below, choose {min} if you strongly disagree and {max} if you strongly agree. The numbers in between are the steps from one to the other.',
   'questionnaire.rateRequired': 'Please rate this statement.',
   'questionnaire.allRequired': 'Please answer all {count} statements before submitting.',
 

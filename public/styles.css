@@ -712,17 +712,65 @@ input[type=range]::-moz-range-thumb {
 .likert-point:focus-within { box-shadow: 0 0 0 2px rgba(43,58,74,0.16); }
 .likert-point input { position: absolute; opacity: 0; pointer-events: none; }
 
+/* The direction of the scale, stated once before the first item. A tinted block with a
+   rule down its edge, so it reads as standing instruction rather than as another
+   sentence of preamble that can be skimmed past. */
+/* The gap below is wider than the one above, and wider than the tightest gap between
+   two items, so the block reads as instruction for the whole set rather than as
+   preamble belonging to the first statement. */
+.scale-guide {
+  margin: 18px 0 32px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--ink);
+  background: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+/* Under the row, and loud.
+ *
+ * This was 11px in soft grey, the faintest thing on a screen whose entire meaning
+ * depends on it. Full-strength ink at 12.5px and weight 600 puts it level with the
+ * statement it qualifies.
+ *
+ * Deliberately NOT applied to the end buttons themselves: making 1 and 7 more
+ * prominent than 2 through 6 would raise extreme responding, which changes the
+ * distribution rather than merely clarifying the direction. The emphasis belongs on
+ * the words, not on the targets. */
 .likert-ends {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  color: var(--ink-soft);
-  margin-top: 7px;
+  gap: 12px;
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.4;
 }
+/* Each label hugs its own end of the row, and stays over it once wrapped, so the
+   left-hand words never drift toward the right-hand boxes. Direct children only: the
+   arrows are nested spans and must not inherit the width cap. */
+.likert-ends > span { flex: 0 1 auto; max-width: 46%; }
+.likert-ends > span:first-child { text-align: left; }
+.likert-ends > span:last-child { text-align: right; }
+
+/* The arrow is the part that reads first, so it is the part set loudest. Kept on one
+   line with the first or last word of its label, so a wrapping label never leaves the
+   arrow stranded on a line of its own pointing at nothing. */
+.end-arrow {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+.end-min .end-arrow { margin-right: 4px; }
+.end-max .end-arrow { margin-left: 4px; }
 
 @media (max-width: 560px) {
   .likert-point { padding: 11px 2px; font-size: 13px; }
   .likert-scale { gap: 4px; }
+  .likert-ends { font-size: 12px; gap: 8px; }
+  .scale-guide { font-size: 13.5px; padding: 11px 12px; margin-bottom: 26px; }
 }
 
 /* ---------------- terminal screens ---------------- */

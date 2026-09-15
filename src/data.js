@@ -93,6 +93,15 @@ export class MongoConnection extends DurableObject {
     return (await this.service()).saveCalibration(sessionId, liked, disliked);
   }
   async assign(sessionId) { return (await this.service()).assign(sessionId); }
+
+  /* Forced assignment, for the cell preview. It has to be here now that the preview is
+     reachable on the deployed Worker: without a pass-through the route would exist,
+     pass its token check, and then fail on a method the stub does not have.
+     Unreachable without PREVIEW_TOKEN, and it consults no cell counts, so it can
+     neither be called by a participant nor disturb the allocation. */
+  async previewAssign(sessionId, condition, level) {
+    return (await this.service()).previewAssign(sessionId, condition, level);
+  }
   async controlsFor(sessionId) { return (await this.service()).controlsFor(sessionId); }
   async saveDraft(sessionId, draft) { return (await this.service()).saveDraft(sessionId, draft); }
   async saveStage4(sessionId, payload) { return (await this.service()).saveStage4(sessionId, payload); }

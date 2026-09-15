@@ -168,8 +168,14 @@ export default {
   'questionnaire.title': 'இறுதியாக சில கேள்விகள்',
   'questionnaire.lede':
     'ஒவ்வொரு கூற்றையும் 1 (கடுமையாக உடன்படவில்லை) முதல் 7 (கடுமையாக உடன்படுகிறேன்) வரை மதிப்பிடவும். அனைத்திற்கும் பதிலளிக்க வேண்டும்.',
-  'questionnaire.likertMin': 'கடுமையாக உடன்படவில்லை',
-  'questionnaire.likertMax': 'கடுமையாக உடன்படுகிறேன்',
+  /* Was "கடுமையாக", which is harshly or severely -- not how Tamil expresses a degree of
+     agreement. "முற்றிலும்" -- completely -- is the ordinary choice for the ends of an
+     agreement scale. That is a slight drift from "strongly" to "completely"; flag it
+     for the reviewer rather than assume it. */
+  'questionnaire.likertMin': 'முற்றிலும் உடன்படவில்லை',
+  'questionnaire.likertMax': 'முற்றிலும் உடன்படுகிறேன்',
+  'questionnaire.scaleGuide':
+    'கீழே உள்ள ஒவ்வொரு கூற்றுக்கும், நீங்கள் முற்றிலும் உடன்படவில்லை என்றால் {min} என்பதைத் தேர்ந்தெடுங்கள், முற்றிலும் உடன்படுகிறீர்கள் என்றால் {max} என்பதைத் தேர்ந்தெடுங்கள். இடையில் உள்ள எண்கள் ஒன்றிலிருந்து மற்றொன்றுக்குச் செல்லும் படிநிலைகள்.',
   'questionnaire.rateRequired': 'தயவுசெய்து இந்தக் கூற்றை மதிப்பிடவும்.',
   'questionnaire.allRequired': 'சமர்ப்பிக்கும் முன் {count} கூற்றுகள் அனைத்திற்கும் பதிலளிக்கவும்.',
 

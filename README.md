@@ -36,26 +36,57 @@ resume, can be walked through before any infrastructure exists.
 
 Assignment is random with no override, which is right for running the study and awkward
 for checking it: seeing all three customisation levels by chance means restarting until
-randomisation happens to deal them out. So the dev server also serves a picker at
-**http://127.0.0.1:8787/preview**. Choose a generation, condition and level and it seeds
-a session that is already consented, onboarded and calibrated, then hands you to the
-study, which resumes it at the reveal. Press Continue and you are in Stage 4 with the
-controls for the level you asked for.
+randomisation happens to deal them out. So there is a picker at **/preview**. Choose a
+generation, condition, level, language and the two calibration colours, and it seeds a
+session that is already consented, onboarded and calibrated, then hands you to the study,
+which resumes it at the reveal. Press Continue and you are in Stage 4 with the controls
+for the level you asked for.
 
-Two things make this safe to have in the repository:
+The colour menus decide what the garment actually wears. The condition picks which of the
+two the participant is shown, so to demonstrate a particular hue, set it as the **most
+liked** colour and open a **Liked** row. Both menus are built from `COLOUR_POOL`, so they
+cannot drift from the hues the route will accept.
 
-- **The route does not exist in production.** It is added to the table only when the host
-  passes `preview: true` to `createRouter`. `tools/dev-server.mjs` does; `src/index.js`
-  does not. On the deployed Worker there is no such path to call, so no request, token or
-  header can reach it. A check asserts both halves of that, and a third asserts that
-  `src/index.js` never turns it on.
-- **The picker is not in `public/`.** It lives in `tools/`, which is not uploaded as a
-  static asset, because it is the one page that names the conditions and levels out loud.
-  A check asserts that nothing under `public/` so much as mentions the endpoint.
+On the dev server this is simply open. **On the deployed Worker it is reachable too**,
+behind a token, so the design can be demonstrated from the live URL. That was a
+deliberate downgrade: what used to be a structural guarantee — no such path exists — is
+now a credential. Four things carry the weight instead, each with a check behind it:
 
-Preview sessions are `completed: false` like any other, so they consume no capacity —
-unless you submit the questionnaire, which is what marks a response complete. On the dev
-server that is stored in memory and vanishes on restart either way.
+- **Its own secret, never `ADMIN_TOKEN`.** `PREVIEW_TOKEN` opens cells and nothing else.
+  If the link escapes, the holder cannot export the dataset or delete the participant
+  table. Checks assert the two tokens do not work in each other's place.
+- **Absent unless configured.** With no `PREVIEW_TOKEN` set there is no way in at all, so
+  a deployment that never sets it behaves exactly as before.
+- **Refusal looks like absence.** The API answers an unauthorised caller with `404`, not
+  `401`, and `GET /preview` without the cookie falls through to the study's own entry
+  point like any other deep link. A participant who guesses the path learns nothing.
+- **The picker is never a static asset.** It is a string in `src/preview-page.js`, bundled
+  into the Worker and handed out only after the token check. `public/` is uploaded and
+  served with no gate, so a check asserts nothing preview-related is in there.
+
+The token is exchanged once for an `HttpOnly`, `SameSite=Strict` cookie and then dropped
+from the URL by a redirect, because the address bar is the one place a token must not sit
+while you are presenting to a room:
+
+```
+https://<your-worker>/preview?key=<PREVIEW_TOKEN>    once, privately
+https://<your-worker>/preview                         thereafter
+```
+
+The cookie lasts 400 days, so in practice the plain URL is simply a page that exists in
+the browser you unlocked and does not exist in anyone else's. That asymmetry is the whole
+mechanism: there is no way to make a bare URL open for you and closed to a participant
+without a per-browser credential, so the design puts the credential in a cookie and keeps
+it long-lived, which is what stops the `?key=` link from being pasted in front of an
+audience. Rotating `PREVIEW_TOKEN` revokes every unlocked browser at once.
+
+**Preview sessions never enter the dataset.** They are written through the real Stage 2
+and 3 methods, so their documents land in the same collection as participants' — but
+`startSession` marks them `isPreview: true`, and the per-cell counts, the admin export
+and the CSV export all filter them out. You can walk a cell to the end of the
+questionnaire and submit it without consuming one of that cell's twenty responses. The
+filter is `$ne: true` rather than `=== false`, so responses written before the field
+existed still count.
 
 Once you have a Cloudflare account you can also run the real Workers runtime with
 `npm run dev:workers`, which additionally needs the Microsoft Visual C++
@@ -97,7 +128,6 @@ tools/
   dev-server.mjs             plain-Node server, no Workers runtime needed
   self-check.mjs             338 automated checks
   export-strings.mjs         all copy in all three languages, as a review CSV
-  preview.html               dev-only cell picker, deliberately outside public/
 
 prototype/                   the original file, kept for provenance. Never deployed.
 ```
@@ -135,9 +165,12 @@ That is enforced structurally rather than by remembering to hide things:
   interface is translated, "the Level 2 bundle does not contain the words *Model tone*"
   proves nothing about a Tamil participant, so the check is that the `skinTone` group is
   absent whatever language it would have been written in.
-- **The one route that could bypass all of this does not exist in production.** The cell
-  preview is registered only when the host asks for it, and only the dev server asks. See
-  "Previewing a particular cell" above.
+- **The one route that could bypass all of this needs its own token.** The cell preview
+  is reachable on the deployed Worker, so that it can be demonstrated, but only with
+  `PREVIEW_TOKEN`; without it the API returns `404` and the picker is never served. This
+  is the weakest link in the blinding, by construction — it is a credential rather than
+  an absence — so treat the link as confidential and do not open the `?key=` form of it
+  on a shared screen. See "Previewing a particular cell" above.
 
 **One honest limit.** The rendering engine ships to everyone, because everyone needs
 the garment drawn, and it necessarily contains the skin-tone maths. A determined Level 2
@@ -229,6 +262,14 @@ write-up:
   validated scale is not automatically equivalent to the original; if one language reads
   stronger than another, language is confounded with condition and level. These need
   forward and back translation, not proofreading.
+- **The Sinhala and Tamil scale anchors were corrected after going live.** The first
+  pass rendered "strongly" as `තදින්` (tightly, in the physical sense) and `கடுமையாக`
+  (harshly), neither of which is how either language expresses a degree of agreement.
+  Both now use "completely" — `සම්පූර්ණයෙන්ම` and `முற்றிலும்` — which is idiomatic but
+  a slight shift in meaning, and still needs a native speaker's sign-off. Any Sinhala or
+  Tamil response collected before this change was answered against the old anchors and
+  is not strictly comparable with later ones. Check whether any exist before pooling.
+  The English anchors are unchanged, so English responses are unaffected.
 - **The consent body is an ethics document.** If the committee approved an English form,
   the translated forms may need approving too.
 - **Colour names carry the manipulation.** Ten hues at one saturation and one lightness
@@ -241,8 +282,41 @@ write-up:
   generation. Worth crosstabbing before treating it as noise.
 
 Coverage is enforced rather than hoped for: `npm run check` fails on a missing key, a
-stale key, a scale item still in English, a lost `{placeholder}`, or a colour-name
-collision.
+stale key, a scale item still in English, a lost `{placeholder}`, a colour-name
+collision, or two ends of the response scale that read alike.
+
+### The response scale
+
+Seven points, anchored at the ends only. Statement above the row, anchors below it, and
+a standing instruction before the first item.
+
+Reversing 1 and 7 is the failure that matters, because it is undetectable: a sincere
+disagreement and a mistaken agreement are the same stored number, and nothing
+downstream can filter on it. So the binding is stated three times over, and no
+statement of it depends on the participant having read the previous one — the standing
+instruction spells out the direction in a sentence, each anchor carries its own number
+next to its word, and an arrow at each end points at the side of the row it labels.
+
+All of that is presentation. The scale is still 1–7 with endpoint anchors, so responses
+collected before and after remain poolable.
+
+Three things are deliberately *not* done, each enforced by a check:
+
+- **The anchors are not colour-coded**, and red/green least of all. The pool carries
+  `green` at hue 125 and reds at 17 and 340, so colouring the ends would tie two of the
+  manipulation's own hues to agreement and disagreement — for a participant whose
+  favourite was green and least favourite `pink_red`, their liked colour would mark
+  agreement and their disliked colour disagreement, and for someone with the opposite
+  preferences that mapping inverts. Picking different hues does not help: the pool is
+  ten hues evenly spaced round the wheel at fixed saturation and lightness, so any
+  saturated pair lands near two of them. Red and green also carry valence, which invites
+  acquiescence on positively-worded items, and red-green deficiency affects roughly 8%
+  of men. The arrow does the same job with none of that.
+- **1 and 7 are not styled apart from 2–6.** Privileging the extremes visually raises
+  extreme responding.
+- **All seven points are not labelled.** Fully-labelled and endpoint-anchored scales
+  produce different response distributions, so doing this mid-study would split the
+  sample at the date it shipped.
 
 ---
 

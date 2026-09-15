@@ -1,22 +1,46 @@
-<!DOCTYPE html>
-<!--
-  Development preview picker.
+/* The preview picker, as a string the Worker can serve.
+ *
+ * It lives in src/ and not in public/ for the same reason it used to live in tools/:
+ * public/ is uploaded to Cloudflare as static assets and served to anyone who asks,
+ * with no gate in front of it. This is the one page in the project that names both
+ * conditions and all three customisation levels out loud, so it must never be a file
+ * that a URL alone can fetch. Kept here, it is bundled into the Worker and handed out
+ * only by a route that has already checked a token.
+ *
+ * It is a template string rather than an imported .html file so that this holds true
+ * without depending on bundler configuration to keep an asset out of the upload. */
 
-  Served only by tools/dev-server.mjs, at /preview. It is not in public/, so it is not
-  part of what gets uploaded to Cloudflare and a participant cannot reach it. It is the
-  one page in this project that names the conditions and levels out loud, which is
-  exactly why it lives here and not there.
+import { COLOUR_POOL, colourKey } from '../public/shared/study-config.js';
+import { translate } from '../public/shared/i18n.js';
 
-  Picking a cell seeds a session that is already consented, onboarded and calibrated,
-  stores its id under the same key the study uses, and hands you to the study at /. From
-  there the real app resumes it: you land on the reveal, press Continue, and you are in
-  Stage 4 with the controls for the level you asked for.
--->
+/* The two colour menus are built from COLOUR_POOL rather than typed out, so they cannot
+ * drift from the pool the preview route validates against: an option that is not in the
+ * pool would be refused, and a hue added to the pool would be missing from the menu.
+ *
+ * Named in English regardless of the language chosen for the run. The picker is an
+ * instrument for whoever is driving it, not part of the study, and someone checking the
+ * Tamil rendering still needs to know which hue they just asked for. */
+function colourOptions(selectedHex) {
+  return COLOUR_POOL.map((colour) => {
+    const name = translate('en', colourKey(colour));
+    const selected = colour.hex.toLowerCase() === selectedHex.toLowerCase() ? ' selected' : '';
+    return `        <option value="${colour.hex}" style="background:${colour.hex}"${selected}>`
+      + `${name} (${colour.hex})</option>`;
+  }).join('\n');
+}
+
+/* The hues the preview used before it could be asked for one: far enough apart that
+ * which of the two the reveal names is obvious at a glance. */
+export const PREVIEW_DEFAULT_LIKED = COLOUR_POOL[0].hex;
+export const PREVIEW_DEFAULT_DISLIKED = COLOUR_POOL[5].hex;
+
+export const previewPage = () => `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Preview a cell — development only</title>
+<meta name="robots" content="noindex, nofollow">
+<title>Preview a cell</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -53,6 +77,8 @@
     color: var(--ink);
   }
   .banner b { font-weight: 600; }
+  .banner p { color: var(--ink); margin: 0 0 8px; }
+  .banner p:last-child { margin: 0; }
 
   .card {
     background: #fff;
@@ -108,11 +134,14 @@
   <p>Jump straight into any of the twelve cells without waiting for randomisation to deal it to you.</p>
 
   <div class="banner">
-    <b>Development only.</b> This page is served by the local dev server and is not part of
-    the deployed site. Sessions you create here are stored in memory and vanish when the
-    server stops. Don't submit the questionnaire on a preview session unless you mean to
-    &mdash; submitting is what marks a response <code>completed</code>, which is what consumes
-    a slot in that cell.
+    <p><b>This page is not for participants.</b> It names both conditions and all three
+    customisation levels, which is exactly what the study keeps from the people taking
+    it. Do not open it on a shared screen while the address bar or your history is
+    visible, and do not leave it open in a browser someone else will use.</p>
+    <p>Sessions started here are tagged as previews. They are excluded from the per-cell
+    counts, from the admin export and from the CSV export, so you can walk a cell all
+    the way through submission without consuming a slot or adding a row to your
+    dataset.</p>
   </div>
 
   <div class="card">
@@ -144,10 +173,35 @@
            places, and neither shows a problem until the words are actually in them. -->
       <select id="language">
         <option value="en">English</option>
-        <option value="si">සිංහල (Sinhala)</option>
-        <option value="ta">தமிழ் (Tamil)</option>
+        <option value="si">&#3523;&#3538;&#3458;&#3524;&#3517; (Sinhala)</option>
+        <option value="ta">&#2980;&#2990;&#3007;&#2996;&#3021; (Tamil)</option>
       </select>
       <span class="level-note">The whole study renders in this, including the reveal sentence and the Stage 4 controls.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Colour choices</h2>
+    <!-- Stands in for what the participant picks in Stage 3. Which of the two the
+         garment ends up wearing is decided by the condition, not here: the Liked rows
+         below use the most liked colour and the Disliked rows use the least liked one.
+         So to show a particular colour on the shirt, set it as the most liked and open
+         a Liked row. -->
+    <p>What the participant would have chosen in the colour calibration. The condition
+    then decides which of the two the T-shirt is rendered in.</p>
+    <div class="row">
+      <label for="liked-colour">Most liked</label>
+      <select id="liked-colour">
+${colourOptions(COLOUR_POOL[0].hex)}
+      </select>
+      <span class="level-note">Worn by the garment in the Liked rows.</span>
+    </div>
+    <div class="row" style="margin-bottom:0">
+      <label for="disliked-colour">Least liked</label>
+      <select id="disliked-colour">
+${colourOptions(COLOUR_POOL[5].hex)}
+      </select>
+      <span class="level-note">Worn by the garment in the Disliked rows.</span>
     </div>
   </div>
 
@@ -179,9 +233,9 @@
   const SESSION_KEY = 'chameleon.sessionId';
 
   const LEVELS = [
-    { level: 1, name: 'Level 1 — no customisation', note: 'Garment only. There should be no controls at all, and no Customise button.' },
-    { level: 2, name: 'Level 2 — text, sleeve, neck', note: 'Custom text with font size, ink colour and drag; sleeve length; neck style. No skin-tone slider.' },
-    { level: 3, name: 'Level 3 — adds skin tone', note: 'Everything in Level 2 plus the skin-tone slider.' }
+    { level: 1, name: 'Level 1 \\u2014 no customisation', note: 'Garment only. There should be no controls at all, and no Customise button.' },
+    { level: 2, name: 'Level 2 \\u2014 text, sleeve, neck', note: 'Custom text with font size, ink colour and drag; sleeve length; neck style. No skin-tone slider.' },
+    { level: 3, name: 'Level 3 \\u2014 adds skin tone', note: 'Everything in Level 2 plus the skin-tone slider.' }
   ];
 
   const statusEl = document.getElementById('status');
@@ -237,25 +291,38 @@
     const generation = document.getElementById('generation').value;
     const gender = document.getElementById('gender').value;
     const language = document.getElementById('language').value;
+    const likedColourHex = document.getElementById('liked-colour').value;
+    const dislikedColourHex = document.getElementById('disliked-colour').value;
+
+    /* Caught here as well as on the server, because the server's refusal is a flat 400
+       and this says which two menus to go and change. */
+    if (likedColourHex === dislikedColourHex) {
+      setStatus('The most liked and least liked colours have to be different.', true);
+      return;
+    }
 
     button.disabled = true;
-    setStatus('Seeding a session\u2026');
+    setStatus('Seeding a session\\u2026');
 
     try {
+      /* Same-origin so the gate cookie rides along; the route rejects anything without
+         it with a 404 rather than a 401, so an unauthorised caller cannot tell the
+         endpoint apart from one that does not exist. */
       const res = await fetch('/api/dev/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ generation, condition, level, gender, language })
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          generation, condition, level, gender, language,
+          likedColourHex, dislikedColourHex
+        })
       });
 
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        /* A 404 here means the server was started without the preview flag, which is
-           what a deployed build looks like. Worth saying plainly rather than as a
-           bare status code. */
         setStatus(
           res.status === 404
-            ? 'This server has the preview route disabled. Start it with tools/dev-server.mjs.'
+            ? 'The preview route turned this down. The gate cookie has most likely expired \\u2014 open the unlock link again.'
             : 'Could not seed a session: ' + (detail.error || res.status),
           true
         );
@@ -273,7 +340,7 @@
       }
       location.href = '/';
     } catch (err) {
-      setStatus('Could not reach the dev server: ' + err.message, true);
+      setStatus('Could not reach the server: ' + err.message, true);
       button.disabled = false;
     }
   }
@@ -291,3 +358,4 @@
 </script>
 </body>
 </html>
+`;

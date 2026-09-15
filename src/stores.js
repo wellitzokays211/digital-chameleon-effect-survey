@@ -55,9 +55,15 @@ export class MongoStore {
     await this.responses.insertOne({ ...doc });
   }
 
+  /* `isPreview: { $ne: true }` rather than `isPreview: false`, because documents written
+     before the field existed do not carry it at all and `$ne` matches a missing field
+     while an equality test would drop every one of them. */
   async completedCountsByCell() {
     const rows = await this.responses
-      .aggregate([{ $match: { completed: true } }, { $group: { _id: '$cellId', n: { $sum: 1 } } }])
+      .aggregate([
+        { $match: { completed: true, isPreview: { $ne: true } } },
+        { $group: { _id: '$cellId', n: { $sum: 1 } } }
+      ])
       .toArray();
     const counts = {};
     for (const row of rows) if (row._id != null) counts[row._id] = row.n;
@@ -95,7 +101,9 @@ export class MongoStore {
   }
 
   listCompleted() {
-    return this.responses.find({ completed: true }, { projection: { _id: 0 } }).toArray();
+    return this.responses
+      .find({ completed: true, isPreview: { $ne: true } }, { projection: { _id: 0 } })
+      .toArray();
   }
 }
 
@@ -171,9 +179,12 @@ export class KvStore {
     return [...map.values()];
   }
 
+  /* Same exclusion as the Mongo store, and for the same reason: a cell demonstrated
+     through the preview must not consume a slot against its target. */
   async completedCountsByCell() {
     const counts = {};
     for (const doc of await this.#allSessions()) {
+      if (doc.isPreview === true) continue;
       if (doc.completed && doc.cellId != null) counts[doc.cellId] = (counts[doc.cellId] || 0) + 1;
     }
     return counts;
@@ -206,6 +217,6 @@ export class KvStore {
   }
 
   async listCompleted() {
-    return (await this.#allSessions()).filter((doc) => doc.completed);
+    return (await this.#allSessions()).filter((doc) => doc.completed && doc.isPreview !== true);
   }
 }

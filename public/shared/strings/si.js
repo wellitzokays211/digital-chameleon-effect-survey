@@ -173,8 +173,14 @@ export default {
   'questionnaire.title': 'අවසාන ප්‍රශ්න කිහිපයක්',
   'questionnaire.lede':
     'එක් එක් ප්‍රකාශය 1 (තදින් එකඟ නොවෙමි) සිට 7 (තදින් එකඟ වෙමි) දක්වා ශ්‍රේණිගත කරන්න. සියල්ලටම පිළිතුරු දිය යුතුය.',
-  'questionnaire.likertMin': 'තදින් එකඟ නොවෙමි',
-  'questionnaire.likertMax': 'තදින් එකඟ වෙමි',
+  /* Was "තදින්", which is tightly or firmly in the physical sense and reads oddly as a
+     degree of agreement. "සම්පූර්ණයෙන්ම" -- completely -- is how the ends of an
+     agreement scale are normally put in Sinhala. That is a slight drift from
+     "strongly" to "completely"; flag it for the reviewer rather than assume it. */
+  'questionnaire.likertMin': 'සම්පූර්ණයෙන්ම එකඟ නොවෙමි',
+  'questionnaire.likertMax': 'සම්පූර්ණයෙන්ම එකඟ වෙමි',
+  'questionnaire.scaleGuide':
+    'පහත සෑම ප්‍රකාශයක් සඳහාම, ඔබ සම්පූර්ණයෙන්ම එකඟ නොවන්නේ නම් {min} තෝරන්න, ඔබ සම්පූර්ණයෙන්ම එකඟ වන්නේ නම් {max} තෝරන්න. අතර ඇති අංක එකකින් අනෙකට යන පියවර වේ.',
   'questionnaire.rateRequired': 'කරුණාකර මෙම ප්‍රකාශය ශ්‍රේණිගත කරන්න.',
   'questionnaire.allRequired': 'ඉදිරිපත් කිරීමට පෙර කරුණාකර ප්‍රකාශ {count}ටම පිළිතුරු දෙන්න.',
 

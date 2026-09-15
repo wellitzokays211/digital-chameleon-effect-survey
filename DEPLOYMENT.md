@@ -96,6 +96,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Run it twice — one value for `EMAIL_HASH_SALT`, one for `ADMIN_TOKEN`.
 
+A third, `PREVIEW_TOKEN`, is optional and only needed if you want to open the cell
+picker on the deployed URL — see 3.2. Leave it unset and the preview stays completely
+unreachable in production. **Do not reuse `ADMIN_TOKEN` for it**: the preview link is
+the one you might open on a laptop in a meeting room, and it must not also be the key
+to exporting or deleting your data.
+
 > **Keep the salt somewhere safe and never change it during data collection.** Every
 > stored email hash is derived from it, so changing it makes them all unmatchable and
 > duplicate control silently stops working.
@@ -106,6 +112,7 @@ Run it twice — one value for `EMAIL_HASH_SALT`, one for `ADMIN_TOKEN`.
 npx wrangler secret put MONGODB_URI        # paste the Atlas string from 1.4
 npx wrangler secret put EMAIL_HASH_SALT
 npx wrangler secret put ADMIN_TOKEN
+npx wrangler secret put PREVIEW_TOKEN      # optional; only for the cell picker
 ```
 
 These are encrypted at rest and never appear in your repository. `.dev.vars` holds the
@@ -170,13 +177,36 @@ note: backend is "mongodb"
 note: cell preview is absent (production)
 ```
 
-The second confirms the development cell picker did not follow you into production. If it
-ever says `ENABLED`, stop — participants could open any condition and level at will, and
-the blinding is gone. You can check it directly too; a 404 is the correct answer:
+The second reports whether the cell picker is open without a token. Against a deployed
+Worker it must say `DISABLED`. If it ever says `ENABLED`, stop — participants could open
+any condition and level at will and the blinding is gone.
+
+Check it directly too. Both of these are what a curious participant would see, and a
+`404` with no picker is the correct answer to each:
 
 ```bash
 curl -i -X POST https://tshirt.YOUR-SUBDOMAIN.workers.dev/api/dev/preview
+curl -s https://tshirt.YOUR-SUBDOMAIN.workers.dev/preview | grep -c "Preview a cell"
 ```
+
+If you set `PREVIEW_TOKEN`, unlock it once per browser and the token then leaves the URL:
+
+```
+https://tshirt.YOUR-SUBDOMAIN.workers.dev/preview?key=YOUR_PREVIEW_TOKEN
+```
+
+You only need that form of the link once per browser. Afterwards the plain
+`/preview` works in that browser, and nowhere else — which is the point, because it means
+the `?key=` URL never has to be pasted during a presentation.
+
+Treat the link as confidential, and open it before your screen is being shared rather than
+during. The cookie lasts 400 days, so unlock only a browser you control; to revoke every
+unlocked browser at once, rotate `PREVIEW_TOKEN` and redeploy. The cookie carries the token
+itself, so old cookies stop working the moment the secret changes.
+
+Sessions you create through the picker are tagged `isPreview` and excluded from
+the cell counts and both exports, so you can demonstrate a full journey, submission
+included, without spending one of a cell's twenty responses.
 
 Set `ADMIN_TOKEN` in your shell first, or the admin checks cannot authenticate:
 
